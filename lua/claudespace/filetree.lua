@@ -96,6 +96,45 @@ local function repo_name_hl(m, active)
   return 'CSTreeRepoClean'
 end
 
+-- ── Diagnostics ───────────────────────────────────────────────────────────────
+-- Diagnostics exist only for loaded buffers (open files). Map their paths to
+-- error/warn counts; dir/repo nodes aggregate the files beneath them.
+
+local function build_diag()
+  local m = {}
+  for _, b in ipairs(api.nvim_list_bufs()) do
+    if api.nvim_buf_is_loaded(b) then
+      local name = api.nvim_buf_get_name(b)
+      if name ~= '' then
+        local ok, c = pcall(vim.diagnostic.count, b)
+        if ok then
+          local e = c[vim.diagnostic.severity.ERROR] or 0
+          local w = c[vim.diagnostic.severity.WARN] or 0
+          if e > 0 or w > 0 then m[name] = { e = e, w = w } end
+        end
+      end
+    end
+  end
+  return m
+end
+
+-- Returns the badge text + the byte length of its error part (for highlighting).
+local function diag_badge(path, is_dir)
+  if not S.diag or not next(S.diag) then return nil end
+  local e, w = 0, 0
+  if is_dir then
+    for p, c in pairs(S.diag) do
+      if p:sub(1, #path + 1) == path .. '/' then e = e + c.e; w = w + c.w end
+    end
+  else
+    local c = S.diag[path]; if c then e, w = c.e, c.w end
+  end
+  if e == 0 and w == 0 then return nil end
+  local etext = e > 0 and ('  ✖' .. e) or ''
+  local wtext = w > 0 and ('  ⚠' .. w) or ''
+  return etext .. wtext, #etext
+end
+
 local function refresh_git()
   S.git_map, S.ignored_set, S.has_git = {}, {}, false
   for _, gr in ipairs(git_roots()) do
@@ -241,6 +280,7 @@ end
 
 local function render()
   if not (S.buf and api.nvim_buf_is_valid(S.buf)) then return end
+  S.diag = build_diag()
   S.entries = scan(S.root, 0)
   compute_is_last(S.entries)
 
@@ -282,7 +322,8 @@ local function render()
     local active = member and (e.path == active_repo_path()) or false
     local glyph  = member and (REPO_GLYPH .. ' ') or ''
     local annot  = member and repo_annotation(member) or nil
-    local line = indent .. connector .. icon .. glyph .. e.name .. (annot or '')
+    local badge, elen = diag_badge(e.path, e.is_dir)
+    local line = indent .. connector .. icon .. glyph .. e.name .. (annot or '') .. (badge or '')
     lines[#lines + 1] = line
 
     local ln        = #lines - 1
@@ -299,6 +340,11 @@ local function render()
       hi(ln, name_col, name_end, git_hl(e.path) or (e.is_dir and 'CSTreeDir' or 'CSTreeFile'))
     end
     if annot then hi(ln, name_end, name_end + #annot, 'Comment') end
+    if badge then
+      local bcol = name_end + #(annot or '')
+      if elen > 0          then hi(ln, bcol, bcol + elen, 'DiagnosticError') end
+      if #badge > elen     then hi(ln, bcol + elen, bcol + #badge, 'DiagnosticWarn') end
+    end
   end
 
   api.nvim_set_option_value('modifiable', true,  { buf = S.buf })
@@ -690,6 +736,13 @@ end
 function M.setup()
   setup_highlights()
   api.nvim_create_autocmd('ColorScheme', { callback = setup_highlights })
+
+  -- Refresh diagnostic badges when diagnostics change (debounced via schedule).
+  api.nvim_create_autocmd('DiagnosticChanged', {
+    callback = function()
+      if S.win and api.nvim_win_is_valid(S.win) then vim.schedule(render) end
+    end,
+  })
 
   -- Guard: if any non-tree buffer lands in the tree window, redirect it
   api.nvim_create_autocmd('BufWinEnter', {
