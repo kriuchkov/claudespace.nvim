@@ -1066,11 +1066,12 @@ function M.setup()
         { silent = true })
     end
   end
-  -- Keep the 81 two-digit buffer maps out of the which-key popup (clutter).
+  -- Keep all the numeric quick-jump maps out of the which-key popup (clutter).
   local ok_wk, wk = pcall(require, 'which-key')
   if ok_wk and wk.add then
     local spec = {}
     for g = 1, 9 do
+      spec[#spec + 1] = { '<leader>' .. g, hidden = true }
       for b = 1, 9 do spec[#spec + 1] = { '<leader>' .. g .. b, hidden = true } end
     end
     wk.add(spec)
