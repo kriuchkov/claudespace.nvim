@@ -428,6 +428,80 @@ function M.show()
   end
 end
 
+-- Info card for a repo (resolved from an exact root or any path inside it):
+-- purpose, branch/status, module, and its place in the dependency graph.
+function M.show_info(path)
+  if not state.loaded then M.load() end
+  local m = M.at(path) or M.of(path)
+  if not m then vim.notify('Not inside a workspace repo', vim.log.levels.WARN); return end
+
+  M.refresh_status(m)  -- refresh the shared cache for other surfaces
+  local st = state.status[m.abspath] or {}
+  -- For the card itself, fetch branch + dirty synchronously (one repo, fast) so
+  -- they always show even on the very first open before the async cache fills.
+  local branch = vim.trim(fn.system({ 'git', '-C', m.abspath, 'rev-parse', '--abbrev-ref', 'HEAD' }))
+  if vim.v.shell_error ~= 0 or branch == '' or branch == 'HEAD' then branch = st.branch or branch end
+  local dirty = 0
+  local d = fn.systemlist({ 'git', '-C', m.abspath, 'status', '--porcelain' })
+  if vim.v.shell_error == 0 then dirty = #d end
+
+  local lines, hls = {}, {}
+  local function add(s, hl)
+    lines[#lines + 1] = s
+    if hl then hls[#hls + 1] = { #lines - 1, 0, -1, hl } end
+  end
+
+  add('')
+  add('  ' .. m.label .. '   ' .. m.path, 'CSTreeDir')
+  local sline = '  '
+  if branch ~= '' then sline = sline .. branch .. '   ' end
+  sline = sline .. (dirty     > 0 and ('●' .. dirty     .. ' ') or '')
+                .. (st.ahead  and st.ahead  > 0 and ('↑' .. st.ahead  .. ' ') or '')
+                .. (st.behind and st.behind > 0 and ('↓' .. st.behind .. ' ') or '')
+  if vim.trim(sline) ~= '' then add(sline, 'Comment') end
+  local purpose = M.purpose(m)
+  if purpose then add('  ' .. purpose, 'String') end
+  local mod = M.module_path(m)
+  if mod then add('  module: ' .. mod, 'Comment') end
+  add('')
+
+  local deps = M.dependency_graph()[m.path]
+  add('  Depends on', 'CSWinbarDir')
+  if deps then for _, d in ipairs(deps) do add('    → ' .. d) end else add('    (none)', 'Comment') end
+  add('')
+
+  local dependents = M.dependents(m.path)
+  add('  Depended on by (' .. #dependents .. ')', 'CSWinbarDir')
+  if #dependents > 0 then
+    for _, d in ipairs(dependents) do add('    ← ' .. d.path) end
+  else
+    add('    (none)', 'Comment')
+  end
+  add('')
+
+  local last = fn.systemlist({ 'git', '-C', m.abspath, 'log', '-1', '--pretty=%h  %s' })
+  if vim.v.shell_error == 0 and last[1] then add('  last: ' .. last[1], 'Comment'); add('') end
+
+  local buf = api.nvim_create_buf(false, true)
+  api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  local NSI = api.nvim_create_namespace('cs_repoinfo')
+  for _, h in ipairs(hls) do api.nvim_buf_add_highlight(buf, NSI, h[4], h[1], h[2], h[3]) end
+  vim.bo[buf].modifiable = false
+  local width  = 62
+  local height = math.min(#lines, vim.o.lines - 4)
+  local win = api.nvim_open_win(buf, true, {
+    relative = 'editor', style = 'minimal', border = 'rounded',
+    title = ' ' .. m.label .. ' ', title_pos = 'center',
+    width = width, height = height,
+    row = math.floor((vim.o.lines - height) / 2),
+    col = math.floor((vim.o.columns - width) / 2),
+  })
+  for _, k in ipairs { 'q', '<Esc>' } do
+    vim.keymap.set('n', k, function() pcall(api.nvim_win_close, win, true) end,
+      { buffer = buf, nowait = true, silent = true })
+  end
+end
+
 -- ── Setup ─────────────────────────────────────────────────────────────────────
 
 function M.setup()

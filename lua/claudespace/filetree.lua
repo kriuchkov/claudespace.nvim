@@ -412,6 +412,7 @@ local HELP_LINES = {
   '  y          yank path to clipboard',
   '  C          set dir as root',
   '  -          go up to parent root',
+  '  i          repo info (workspace)',
   '  H          toggle hidden files',
   '  R          refresh git status',
   '  q / <Esc>  close tree',
@@ -441,6 +442,12 @@ local function show_help()
   end
 end
 
+-- Show the workspace info card for the repo at (or containing) the cursor entry.
+local function repo_info()
+  local e = entry_at_cursor()
+  require('claudespace.repos').show_info(e and e.path or S.root)
+end
+
 -- ── Window ────────────────────────────────────────────────────────────────────
 
 local function create_buf()
@@ -467,6 +474,7 @@ local function create_buf()
   k('n', 'y',     yank_path,         o)
   k('n', 'C',     change_root,       o)
   k('n', '-',     root_up,           o)
+  k('n', 'i',     repo_info,         o)
   k('n', '?',     show_help,         o)
   return buf
 end
