@@ -399,6 +399,7 @@ function M.show()
     row = math.floor((vim.o.lines - #lines) / 2),
     col = math.floor((vim.o.columns - width) / 2),
   })
+  vim.wo[win].wrap = true; vim.wo[win].linebreak = true; vim.wo[win].breakindent = true
 
   local function close() pcall(api.nvim_win_close, win, true) end
   local function member_here()
@@ -496,6 +497,7 @@ function M.show_info(path)
     row = math.floor((vim.o.lines - height) / 2),
     col = math.floor((vim.o.columns - width) / 2),
   })
+  vim.wo[win].wrap = true; vim.wo[win].linebreak = true; vim.wo[win].breakindent = true
   for _, k in ipairs { 'q', '<Esc>' } do
     vim.keymap.set('n', k, function() pcall(api.nvim_win_close, win, true) end,
       { buffer = buf, nowait = true, silent = true })

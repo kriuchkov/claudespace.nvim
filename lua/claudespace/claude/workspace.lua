@@ -117,6 +117,7 @@ local function show_broadcast(task, targets, results)
   vim.bo[buf].buftype    = 'nofile'
   vim.bo[buf].bufhidden  = 'wipe'
   vim.bo[buf].modifiable = false
+  vim.wo.wrap = true; vim.wo.linebreak = true; vim.wo.breakindent = true
   vim.keymap.set('n', 'q', '<cmd>bd<CR>', { buffer = buf, silent = true })
 end
 
