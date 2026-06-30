@@ -55,16 +55,29 @@ local function default_root()
   return fn.getcwd()
 end
 
--- Repo annotation (branch ●dirty) for a directory node that is a member repo
--- root. Uses the repos module's async-cached status — no git call here.
-local function repo_annotation(path)
+local REPO_GLYPH = vim.fn.nr2char(0xf1b2)  -- cube — marks a member repo root
+
+-- The member repo whose root is exactly `path` (multi-repo workspaces only).
+local function repo_member(path)
   local ok, repos = pcall(require, 'claudespace.repos')
   if not (ok and repos.is_multi()) then return nil end
-  local m
   for _, mem in ipairs(repos.list()) do
-    if mem.abspath == path then m = mem; break end
+    if mem.abspath == path then return mem end
   end
-  if not m then return nil end
+end
+
+local function is_repo_path(path) return repo_member(path) ~= nil end
+
+local function active_repo_path()
+  local ok, repos = pcall(require, 'claudespace.repos')
+  local a = ok and repos.active()
+  return a and a.abspath or nil
+end
+
+-- Annotation (branch ●dirty ↑ahead ↓behind) for a repo root, from the cached
+-- status — no git call here.
+local function repo_annotation(m)
+  local repos = require('claudespace.repos')
   local st = repos.status(m)
   if not st then repos.refresh_status(m); return '  …' end
   local s = st.branch ~= '' and ('  ' .. st.branch) or ''
@@ -72,6 +85,15 @@ local function repo_annotation(path)
   if st.ahead  > 0 then s = s .. ' ↑' .. st.ahead  end
   if st.behind > 0 then s = s .. ' ↓' .. st.behind end
   return s
+end
+
+-- Name highlight for a repo root: active wins, then dirty, then ahead, else clean.
+local function repo_name_hl(m, active)
+  if active then return 'CSTreeRepoActive' end
+  local st = require('claudespace.repos').status(m)
+  if st and st.dirty  and st.dirty  > 0 then return 'CSTreeRepoDirty' end
+  if st and st.ahead  and st.ahead  > 0 then return 'CSTreeRepoAhead' end
+  return 'CSTreeRepoClean'
 end
 
 local function refresh_git()
@@ -115,6 +137,33 @@ end
 
 -- ── Scanning ──────────────────────────────────────────────────────────────────
 
+local function visible_children(dir)
+  local ok, items = pcall(fn.readdir, dir)
+  if not ok or not items then return {} end
+  local out = {}
+  for _, name in ipairs(items) do
+    if not ALWAYS_HIDE[name] and (S.show_hidden or name:sub(1, 1) ~= '.') then
+      out[#out + 1] = name
+    end
+  end
+  return out
+end
+
+-- "Compact folders" (VS Code style): collapse a chain of single-child directories
+-- into one node (internal/core/ports). Stops at repo roots so they keep their own
+-- annotated node. Returns the deepest path + the combined display name.
+local function compact(dir, name)
+  local disp, real = name, dir
+  while true do
+    local kids = visible_children(real)
+    if #kids ~= 1 then break end
+    local child = real .. '/' .. kids[1]
+    if fn.isdirectory(child) ~= 1 or is_repo_path(child) then break end
+    disp, real = disp .. '/' .. kids[1], child
+  end
+  return real, disp
+end
+
 local function scan(dir, depth)
   local ok, items = pcall(fn.readdir, dir)
   if not ok or not items then return {} end
@@ -130,13 +179,17 @@ local function scan(dir, depth)
   for _, name in ipairs(items) do
     if ALWAYS_HIDE[name] then goto skip end
     if not S.show_hidden and name:sub(1,1) == '.' then goto skip end
-    local path   = dir .. '/' .. name
-    local is_dir = fn.isdirectory(path) == 1
-    table.insert(entries, { depth = depth, name = name, path = path, is_dir = is_dir })
-    if is_dir and S.expanded[path] then
-      for _, child in ipairs(scan(path, depth + 1)) do
-        table.insert(entries, child)
+    local path = dir .. '/' .. name
+    if fn.isdirectory(path) == 1 then
+      local real, disp = compact(path, name)
+      table.insert(entries, { depth = depth, name = disp, path = real, is_dir = true })
+      if S.expanded[real] then
+        for _, child in ipairs(scan(real, depth + 1)) do
+          table.insert(entries, child)
+        end
       end
+    else
+      table.insert(entries, { depth = depth, name = name, path = path, is_dir = false })
     end
     ::skip::
   end
@@ -225,18 +278,26 @@ local function render()
                    or (e.is_last     and '└ ' or '├ ')
 
     local icon, icon_hl = get_file_icon(e.name, e.is_dir, S.expanded[e.path])
-    local annot = e.is_dir and repo_annotation(e.path) or nil
-    local line = indent .. connector .. icon .. e.name .. (annot or '')
+    local member = e.is_dir and repo_member(e.path) or nil
+    local active = member and (e.path == active_repo_path()) or false
+    local glyph  = member and (REPO_GLYPH .. ' ') or ''
+    local annot  = member and repo_annotation(member) or nil
+    local line = indent .. connector .. icon .. glyph .. e.name .. (annot or '')
     lines[#lines + 1] = line
 
-    local ln       = #lines - 1
-    local icon_col = #indent + #connector
-    local name_col = icon_col + #icon
-    local name_end = name_col + #e.name
-    hi(ln, 0, icon_col, 'CSTreeGuide')   -- dim the entire structural prefix
-    hi(ln, icon_col, name_col, icon_hl)
-    hi(ln, name_col, name_end,
-       git_hl(e.path) or (e.is_dir and 'CSTreeDir' or 'CSTreeFile'))
+    local ln        = #lines - 1
+    local icon_col  = #indent + #connector
+    local glyph_col = icon_col + #icon
+    local name_col  = glyph_col + #glyph
+    local name_end  = name_col + #e.name
+    hi(ln, 0, icon_col, 'CSTreeGuide')          -- dim the structural prefix
+    hi(ln, icon_col, glyph_col, icon_hl)         -- chevron
+    if member then
+      hi(ln, glyph_col, name_col, active and 'CSTreeRepoActive' or 'CSTreeRepoGlyph')
+      hi(ln, name_col, name_end, repo_name_hl(member, active))
+    else
+      hi(ln, name_col, name_end, git_hl(e.path) or (e.is_dir and 'CSTreeDir' or 'CSTreeFile'))
+    end
     if annot then hi(ln, name_end, name_end + #annot, 'Comment') end
   end
 
@@ -610,6 +671,12 @@ local function setup_highlights()
   hi(0, 'CSTreeDirIcon',  { fg = '#7aa2f7' })
   hi(0, 'CSTreeDir',      { fg = '#7aa2f7', bold = true })
   hi(0, 'CSTreeFile',     { fg = '#9aa5ce' })
+  -- Repo roots: a cube glyph + status-coloured name; active repo stands out.
+  hi(0, 'CSTreeRepoGlyph',  { fg = '#565f89' })
+  hi(0, 'CSTreeRepoActive', { fg = '#7dcfff', bold = true })
+  hi(0, 'CSTreeRepoClean',  { fg = '#c0caf5', bold = true })
+  hi(0, 'CSTreeRepoDirty',  { fg = '#e0af68', bold = true })
+  hi(0, 'CSTreeRepoAhead',  { fg = '#9ece6a', bold = true })
   hi(0, 'CSTreeFileIcon', { fg = '#3d4574' })  -- single subdued colour for all file icons
   -- Git status
   hi(0, 'CSTreeGitMod',  { fg = '#e0af68' })
