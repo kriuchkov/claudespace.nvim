@@ -149,6 +149,8 @@ function M.read_float(lines, title, ft)
     title = title, title_pos = 'center',
   })
   vim.wo[win].wrap = true
+  vim.wo[win].linebreak = true   -- wrap at word boundaries, not mid-word
+  vim.wo[win].breakindent = true
 
   local function close() pcall(vim.api.nvim_win_close, win, true) end
   for _, k in ipairs { 'q', '<Esc>', '<CR>' } do
