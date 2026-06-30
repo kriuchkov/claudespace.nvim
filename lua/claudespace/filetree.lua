@@ -288,27 +288,23 @@ end
 
 -- ── Rendering ─────────────────────────────────────────────────────────────────
 
--- Pure: mark e.is_last on every entry so render() can draw indent guides.
--- An entry is "last" when it has no future sibling at the same depth —
--- scanning forward through deeper children until the depth returns to or above e.depth.
+-- Mark e.is_last on every entry (no later sibling at the same depth) for the
+-- indent guides. O(n · maxdepth): walk backwards tracking whether a later
+-- sibling exists per depth; crossing to a shallower depth resets deeper levels.
 local function compute_is_last(entries)
-  for i, e in ipairs(entries) do
-    local has_sibling = false
-    for j = i + 1, #entries do
-      if entries[j].depth == e.depth then
-        has_sibling = true; break
-      elseif entries[j].depth < e.depth then
-        break  -- returned to an ancestor level, no sibling possible
-      end
-    end
-    e.is_last = not has_sibling
+  local seen = {}   -- depth -> a later sibling exists
+  for i = #entries, 1, -1 do
+    local d = entries[i].depth
+    entries[i].is_last = not seen[d]
+    seen[d] = true
+    for dd in pairs(seen) do if dd > d then seen[dd] = nil end end
   end
 end
 
 local function render()
   if not (S.buf and api.nvim_buf_is_valid(S.buf)) then return end
   build_repo_cache()
-  S.diag = build_diag()
+  if S.diag == nil or S.diag_dirty then S.diag = build_diag(); S.diag_dirty = false end
   S.entries = S.changed_only and scan_changed() or scan(S.root, 0)
   compute_is_last(S.entries)
 
@@ -327,20 +323,16 @@ local function render()
   hi(0, 0, -1, 'CSTreeRoot')
   hi(1, 0, -1, 'CSTreePath')
 
+  -- anc_last[d] = is_last of the current ancestor at depth d. Maintained as we
+  -- walk in DFS order so the indent guides cost O(depth), not a backward scan.
+  local anc_last = {}
   for idx, e in ipairs(S.entries) do
-    -- Build indent: guide chars for each ancestor level
+    -- Build indent: guide char per ancestor level
     local indent = ' '
     for d = 0, e.depth - 1 do
-      -- Find nearest ancestor at depth d (look backwards)
-      local ancestor_is_last = true
-      for j = idx - 1, 1, -1 do
-        if S.entries[j].depth == d then
-          ancestor_is_last = S.entries[j].is_last
-          break
-        end
-      end
-      indent = indent .. (ancestor_is_last and '  ' or '│ ')
+      indent = indent .. (anc_last[d] and '  ' or '│ ')
     end
+    anc_last[e.depth] = e.is_last
 
     -- Connector: ├ or └ (only for depth > 0)
     local connector = e.depth == 0 and '  '
@@ -853,8 +845,9 @@ function M.setup()
   -- Refresh diagnostic badges when diagnostics change. Debounced (300ms) — LSP
   -- pushes diagnostics rapidly while typing and a full re-render walks the FS.
   local diag_timer
-  api.nvim_create_autocmd('DiagnosticChanged', {
+  api.nvim_create_autocmd({ 'DiagnosticChanged', 'BufDelete' }, {
     callback = function()
+      S.diag_dirty = true   -- rebuild the diag map on the next render
       if not (S.win and api.nvim_win_is_valid(S.win)) then return end
       if diag_timer then diag_timer:stop() end
       diag_timer = vim.defer_fn(function()
