@@ -558,6 +558,7 @@ local HELP_LINES = {
   '  s          git stage / unstage',
   '  gd         git diff',
   '  c          changed-only view (toggle)',
+  '  f          find files in this repo',
   '  H          toggle hidden files',
   '  R          refresh git status',
   '  q / <Esc>  close tree',
@@ -591,6 +592,14 @@ end
 local function repo_info()
   local e = entry_at_cursor()
   require('claudespace.repos').show_info(e and e.path or S.root)
+end
+
+-- Fuzzy-find files within the repo at (or containing) the cursor entry.
+local function find_in_repo()
+  local e = entry_at_cursor()
+  local path = e and e.path or S.root
+  local repos = require('claudespace.repos')
+  repos.find_files(repos.at(path) or repos.of(path))
 end
 
 -- ── Inline git ────────────────────────────────────────────────────────────────
@@ -686,6 +695,7 @@ local function create_buf()
   k('n', 's',     git_stage,         o)
   k('n', 'gd',    git_diff,          o)
   k('n', 'c',     toggle_changed,    o)
+  k('n', 'f',     find_in_repo,      o)
   k('n', '?',     show_help,         o)
   return buf
 end

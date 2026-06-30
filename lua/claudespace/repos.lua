@@ -566,6 +566,24 @@ function M.terminal()
   vim.notify('Terminal in ' .. fn.fnamemodify(cwd, ':t'), vim.log.levels.INFO)
 end
 
+-- Fuzzy-find files scoped to a single repo (defaults to the active one).
+function M.find_files(member)
+  member = member or M.at(M.active_cwd())
+    or { abspath = M.active_cwd(), label = fn.fnamemodify(M.active_cwd(), ':t') }
+  local ok, tb = pcall(require, 'telescope.builtin')
+  if not ok then vim.notify('telescope required for file search', vim.log.levels.WARN); return end
+  tb.find_files({ cwd = member.abspath, prompt_title = 'Files in ' .. (member.label or '?') })
+end
+
+-- Live-grep scoped to a single repo (defaults to the active one).
+function M.grep_files(member)
+  member = member or M.at(M.active_cwd())
+    or { abspath = M.active_cwd(), label = fn.fnamemodify(M.active_cwd(), ':t') }
+  local ok, tb = pcall(require, 'telescope.builtin')
+  if not ok then vim.notify('telescope required for grep', vim.log.levels.WARN); return end
+  tb.live_grep({ cwd = member.abspath, prompt_title = 'Grep in ' .. (member.label or '?') })
+end
+
 -- ── Setup ─────────────────────────────────────────────────────────────────────
 
 function M.setup()
@@ -592,7 +610,11 @@ function M.setup()
     { desc = 'Show workspace repos' })
 
   vim.keymap.set('n', '<leader>wp', M.show, { silent = true, desc = 'Workspace: repos overview' })
-  vim.keymap.set('n', '<leader>wt', M.terminal, { silent = true, desc = 'Workspace: terminal in active repo' })
+  vim.keymap.set('n', '<leader>wT', M.terminal, { silent = true, desc = 'Workspace: terminal in active repo' })
+  vim.keymap.set('n', '<leader>fr', function() M.find_files() end,
+    { silent = true, desc = 'Find files in active repo' })
+  vim.keymap.set('n', '<leader>fG', function() M.grep_files() end,
+    { silent = true, desc = 'Grep in active repo' })
 end
 
 return M
