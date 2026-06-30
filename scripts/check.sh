@@ -50,6 +50,7 @@ else
     "claudespace.claude.codegen"
     "claudespace.claude.fix"
     "claudespace.claude.assist"
+    "claudespace.claude.workspace"
     "claudespace.sidebar"
     "claudespace.layout"
     "claudespace.workspace"
