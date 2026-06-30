@@ -137,7 +137,11 @@ function M.broadcast()
             results[m.path] = (res.code == 0 and vim.trim(res.stdout or ''))
               or ('ERROR: ' .. vim.trim((res.stderr or '') ~= '' and res.stderr or tostring(res.code)))
             done = done + 1
-            if done == #targets then show_broadcast(task, targets, results) end
+            if done == #targets then
+              show_broadcast(task, targets, results)
+            else
+              vim.notify(('Broadcast %d/%d…'):format(done, #targets), vim.log.levels.INFO)
+            end
           end))
       end
     end)

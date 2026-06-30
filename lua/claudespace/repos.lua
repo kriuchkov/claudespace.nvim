@@ -207,30 +207,63 @@ local function go_module_path(abspath)
   end
 end
 
--- Intra-workspace dependency edges (Go): repo.path -> { dep repo.path, ... },
--- derived from each go.mod's requires that resolve to another member's module.
+local function js_name(abspath)
+  local pkg = abspath .. '/package.json'
+  if fn.filereadable(pkg) == 0 then return nil end
+  local ok, data = pcall(fn.json_decode, table.concat(fn.readfile(pkg), '\n'))
+  if ok and type(data) == 'table' then return data.name end
+end
+
+-- Intra-workspace dependency edges: repo.path -> { dep repo.path, ... }.
+-- Resolves Go (go.mod requires → module), Rust (Cargo.toml path deps) and
+-- JS/TS (package.json deps by package name) against other members.
 function M.dependency_graph()
   if state.depgraph then return state.depgraph end
-  local mod_to_repo = {}
+  local go_mod, js_pkg = {}, {}
   for _, m in ipairs(state.members) do
-    local mp = go_module_path(m.abspath)
-    if mp then mod_to_repo[mp] = m.path end
+    local gp = go_module_path(m.abspath); if gp then go_mod[gp] = m.path end
+    local jn = js_name(m.abspath);        if jn then js_pkg[jn] = m.path end
   end
+
   local graph = {}
   for _, m in ipairs(state.members) do
+    local deps = {}
+    local function edge(to) if to and to ~= m.path then deps[to] = true end end
+
     local gomod = m.abspath .. '/go.mod'
     if fn.filereadable(gomod) == 1 then
-      local deps = {}
       for _, line in ipairs(fn.readfile(gomod)) do
         local dep = line:match('^%s+(%S+)%s+v') or line:match('^require%s+(%S+)%s+v')
-        if dep and mod_to_repo[dep] and mod_to_repo[dep] ~= m.path then
-          deps[mod_to_repo[dep]] = true
+        if dep then edge(go_mod[dep]) end
+      end
+    end
+
+    local cargo = m.abspath .. '/Cargo.toml'
+    if fn.filereadable(cargo) == 1 then
+      for _, line in ipairs(fn.readfile(cargo)) do
+        local p = line:match('path%s*=%s*"([^"]+)"')
+        if p then
+          local target = strip_slash(fn.fnamemodify(m.abspath .. '/' .. p, ':p'))
+          local tm = M.at(target); if tm then edge(tm.path) end
         end
       end
-      local list = {}
-      for d in pairs(deps) do list[#list + 1] = d end
-      if #list > 0 then table.sort(list); graph[m.path] = list end
     end
+
+    local pkg = m.abspath .. '/package.json'
+    if fn.filereadable(pkg) == 1 then
+      local ok, data = pcall(fn.json_decode, table.concat(fn.readfile(pkg), '\n'))
+      if ok and type(data) == 'table' then
+        for _, field in ipairs { 'dependencies', 'devDependencies' } do
+          if type(data[field]) == 'table' then
+            for name in pairs(data[field]) do edge(js_pkg[name]) end
+          end
+        end
+      end
+    end
+
+    local list = {}
+    for d in pairs(deps) do list[#list + 1] = d end
+    if #list > 0 then table.sort(list); graph[m.path] = list end
   end
   state.depgraph = graph
   return graph
@@ -345,14 +378,24 @@ function M.init_manifest()
   for e in pairs(exact)   do table.insert(include, e) end
   table.sort(include)
 
-  local manifest = {
-    name    = fn.fnamemodify(root, ':t'),
-    include = include,
-    exclude = {},
-    pin     = {},
-  }
+  -- Write indented JSON by hand (json_encode is compact) so the manifest stays
+  -- easy to hand-edit.
+  local function arr(t)
+    if #t == 0 then return '[]' end
+    local items = {}
+    for _, v in ipairs(t) do items[#items + 1] = '    ' .. fn.json_encode(v) end
+    return '[\n' .. table.concat(items, ',\n') .. '\n  ]'
+  end
+  local json = table.concat({
+    '{',
+    '  "name": ' .. fn.json_encode(fn.fnamemodify(root, ':t')) .. ',',
+    '  "include": ' .. arr(include) .. ',',
+    '  "exclude": [],',
+    '  "pin": []',
+    '}',
+  }, '\n')
   fn.mkdir(dir, 'p')
-  fn.writefile(vim.split(fn.json_encode(manifest), '\n'), path)
+  fn.writefile(vim.split(json, '\n'), path)
   M.load()
   vim.notify(('claudespace: wrote %s (%d repos)'):format(
     fn.fnamemodify(path, ':~'), #state.members), vim.log.levels.INFO)
@@ -483,6 +526,8 @@ function M.show_info(path)
   local last = fn.systemlist({ 'git', '-C', m.abspath, 'log', '-1', '--pretty=%h  %s' })
   if vim.v.shell_error == 0 and last[1] then add('  last: ' .. last[1], 'Comment'); add('') end
 
+  add('  g git   c claude   ⏎ tree   q close', 'Comment')
+
   local buf = api.nvim_create_buf(false, true)
   api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   local NSI = api.nvim_create_namespace('cs_repoinfo')
@@ -498,10 +543,14 @@ function M.show_info(path)
     col = math.floor((vim.o.columns - width) / 2),
   })
   vim.wo[win].wrap = true; vim.wo[win].linebreak = true; vim.wo[win].breakindent = true
-  for _, k in ipairs { 'q', '<Esc>' } do
-    vim.keymap.set('n', k, function() pcall(api.nvim_win_close, win, true) end,
-      { buffer = buf, nowait = true, silent = true })
-  end
+
+  local function close() pcall(api.nvim_win_close, win, true) end
+  local function act(fnc) return function() close(); pcall(fnc) end end
+  local o = { buffer = buf, nowait = true, silent = true }
+  vim.keymap.set('n', 'g', act(function() require('claudespace.git_ui').open(nil, m.abspath) end), o)
+  vim.keymap.set('n', 'c', act(function() require('claudespace.claude.sessions').new(m.abspath) end), o)
+  vim.keymap.set('n', '<CR>', act(function() require('claudespace.filetree').focus_path(m.abspath) end), o)
+  for _, k in ipairs { 'q', '<Esc>' } do vim.keymap.set('n', k, close, o) end
 end
 
 -- ── Setup ─────────────────────────────────────────────────────────────────────
