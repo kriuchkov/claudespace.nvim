@@ -996,6 +996,19 @@ function M.goto_group(n)
   set_buf_safe(best)
 end
 
+-- Jump to the n-th buffer within the CURRENT group (matches the visible per-group
+-- numbers). Used by <A-1..9>.
+function M.goto_buf_n(n)
+  local gid = buf_group[vim.api.nvim_get_current_buf()]
+  local idx = 0
+  for _, b in ipairs(sorted_bufs(listed_bufs())) do
+    if b.gid == gid then
+      idx = idx + 1
+      if idx == n then set_buf_safe(b.bufnr); return end
+    end
+  end
+end
+
 -- Open the b-th buffer within the g-th group.
 function M.goto_group_buf(g, b)
   local gid = ordered_groups()[g]
@@ -1097,6 +1110,8 @@ function M.setup()
   for g = 1, 9 do
     map('n', '<leader>' .. g, function() M.goto_group(g) end,
       { silent = true, desc = 'Tab: group ' .. g })
+    -- <A-N> jumps to the n-th buffer in the current group (the visible numbers).
+    map('n', '<A-' .. g .. '>', function() M.goto_buf_n(g) end, { silent = true })
     for b = 1, 9 do
       map('n', '<leader>' .. g .. b, function() M.goto_group_buf(g, b) end,
         { silent = true })

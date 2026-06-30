@@ -45,6 +45,12 @@ local function win_opts()
   vim.wo.scrolloff = 0
 end
 
+-- Cluster Claude session tabs into a dedicated 'claude' group (terminals are
+-- skipped by auto-grouping, so they'd otherwise drift in the ungrouped zone).
+local function group_claude(buf)
+  pcall(function() require('claudespace.tabline').group_add(buf, 'claude') end)
+end
+
 local ensure_editor_win = require('claudespace.claude.util').ensure_editor_win
 
 -- Delete buf if it's a listed empty [No Name] buffer (cleanup after M.new replaces it).
@@ -85,6 +91,7 @@ function M.new(cwd)
   local prev_buf = api.nvim_win_get_buf(0)
   local buf = api.nvim_create_buf(true, false)
   vim.b[buf].cs_session_id = id
+  group_claude(buf)
   api.nvim_win_set_buf(0, buf)
   local job_id = fn.termopen("zsh -i -c 'claude'", { cwd = cwd })
   sess.bufnr  = buf
@@ -125,6 +132,7 @@ function M.open(id)
     -- process died but session entry survived — restart
     buf = api.nvim_create_buf(true, false)
     vim.b[buf].cs_session_id = id
+    group_claude(buf)
     api.nvim_win_set_buf(0, buf)
     fn.termopen("zsh -i -c 'claude'", { cwd = sess.cwd })
     sess.bufnr = buf
@@ -298,6 +306,7 @@ local function start_background(sess)
   local orig_win = api.nvim_get_current_win()
   local buf = api.nvim_create_buf(true, false)
   vim.b[buf].cs_session_id = sess.id
+  group_claude(buf)
   sess.bufnr = buf
 
   -- termopen needs the buffer current in a window to size the PTY. Use a float
