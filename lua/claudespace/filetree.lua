@@ -37,7 +37,8 @@ local function git_roots()
   if ok and repos.is_multi() then
     local roots = {}
     for _, m in ipairs(repos.list()) do
-      if S.expanded[m.abspath] then roots[#roots + 1] = m.abspath end
+      -- changed-only mode needs the full change set, so scan every repo then.
+      if S.changed_only or S.expanded[m.abspath] then roots[#roots + 1] = m.abspath end
     end
     return roots
   end
@@ -235,6 +236,34 @@ local function scan(dir, depth)
   return entries
 end
 
+-- Changed-only view: build the tree from git_map (changed files across repos),
+-- emitting each file's ancestor dirs on first encounter. All dirs are expanded.
+local function scan_changed()
+  local files = {}
+  for abs, ch in pairs(S.git_map) do
+    if ch ~= '!' and abs:sub(1, #S.root + 1) == S.root .. '/'
+       and fn.isdirectory(abs) ~= 1 then
+      files[#files + 1] = abs
+    end
+  end
+  table.sort(files)
+
+  local entries, seen = {}, {}
+  for _, abs in ipairs(files) do
+    local parts = vim.split(abs:sub(#S.root + 2), '/')
+    local acc = S.root
+    for i = 1, #parts - 1 do
+      acc = acc .. '/' .. parts[i]
+      if not seen[acc] then
+        seen[acc] = true
+        entries[#entries + 1] = { depth = i - 1, name = parts[i], path = acc, is_dir = true }
+      end
+    end
+    entries[#entries + 1] = { depth = #parts - 1, name = parts[#parts], path = abs, is_dir = false }
+  end
+  return entries
+end
+
 -- ── Icons ─────────────────────────────────────────────────────────────────────
 
 local FALLBACK_ICONS = {
@@ -281,13 +310,14 @@ end
 local function render()
   if not (S.buf and api.nvim_buf_is_valid(S.buf)) then return end
   S.diag = build_diag()
-  S.entries = scan(S.root, 0)
+  S.entries = S.changed_only and scan_changed() or scan(S.root, 0)
   compute_is_last(S.entries)
 
   -- Header: icon + project name (bold), dimmer full path below
   local project  = fn.fnamemodify(S.root, ':t')
   local fullpath = fn.fnamemodify(S.root, ':~')
-  local hint     = not S.show_hidden and '  ·hidden' or ''
+  local hint     = S.changed_only and '  ·changes'
+                or (not S.show_hidden and '  ·hidden' or '')
   local lines = {
     ' 󰉋 ' .. project .. hint,
     '  ' .. fullpath,
@@ -345,6 +375,11 @@ local function render()
       if elen > 0          then hi(ln, bcol, bcol + elen, 'DiagnosticError') end
       if #badge > elen     then hi(ln, bcol + elen, bcol + #badge, 'DiagnosticWarn') end
     end
+  end
+
+  if S.changed_only and #S.entries == 0 then
+    lines[#lines + 1] = '  (no changes)'
+    hi(#lines - 1, 0, -1, 'Comment')
   end
 
   api.nvim_set_option_value('modifiable', true,  { buf = S.buf })
@@ -522,6 +557,7 @@ local HELP_LINES = {
   '  i          repo info (workspace)',
   '  s          git stage / unstage',
   '  gd         git diff',
+  '  c          changed-only view (toggle)',
   '  H          toggle hidden files',
   '  R          refresh git status',
   '  q / <Esc>  close tree',
@@ -613,6 +649,13 @@ local function git_diff()
   vim.keymap.set('n', 'q', '<cmd>bd<CR>', { buffer = dbuf, silent = true })
 end
 
+-- Toggle "changed-only" view: just the git-modified files across all repos.
+local function toggle_changed()
+  S.changed_only = (not S.changed_only) or nil
+  refresh_git()   -- git_roots() now covers every repo while changed_only is on
+  render()
+end
+
 -- ── Window ────────────────────────────────────────────────────────────────────
 
 local function create_buf()
@@ -642,6 +685,7 @@ local function create_buf()
   k('n', 'i',     repo_info,         o)
   k('n', 's',     git_stage,         o)
   k('n', 'gd',    git_diff,          o)
+  k('n', 'c',     toggle_changed,    o)
   k('n', '?',     show_help,         o)
   return buf
 end
