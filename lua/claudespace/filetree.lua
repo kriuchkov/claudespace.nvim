@@ -58,22 +58,20 @@ end
 
 local REPO_GLYPH = vim.fn.nr2char(0xf1b2)  -- cube — marks a member repo root
 
--- The member repo whose root is exactly `path` (multi-repo workspaces only).
-local function repo_member(path)
+-- Repo lookups are hot (every dir node, every render). Cache abspath→member and
+-- the active repo once per render instead of re-scanning repos.list() each time.
+local function build_repo_cache()
+  S.repo_set, S.active_path = {}, nil
   local ok, repos = pcall(require, 'claudespace.repos')
-  if not (ok and repos.is_multi()) then return nil end
-  for _, mem in ipairs(repos.list()) do
-    if mem.abspath == path then return mem end
-  end
+  if not (ok and repos.is_multi()) then return end
+  for _, m in ipairs(repos.list()) do S.repo_set[m.abspath] = m end
+  local a = repos.active()
+  S.active_path = a and a.abspath or nil
 end
 
-local function is_repo_path(path) return repo_member(path) ~= nil end
-
-local function active_repo_path()
-  local ok, repos = pcall(require, 'claudespace.repos')
-  local a = ok and repos.active()
-  return a and a.abspath or nil
-end
+local function repo_member(path)      return S.repo_set and S.repo_set[path] or nil end
+local function is_repo_path(path)     return repo_member(path) ~= nil end
+local function active_repo_path()     return S.active_path end
 
 -- Annotation (branch ●dirty ↑ahead ↓behind) for a repo root, from the cached
 -- status — no git call here.
@@ -309,6 +307,7 @@ end
 
 local function render()
   if not (S.buf and api.nvim_buf_is_valid(S.buf)) then return end
+  build_repo_cache()
   S.diag = build_diag()
   S.entries = S.changed_only and scan_changed() or scan(S.root, 0)
   compute_is_last(S.entries)
@@ -851,10 +850,16 @@ function M.setup()
   setup_highlights()
   api.nvim_create_autocmd('ColorScheme', { callback = setup_highlights })
 
-  -- Refresh diagnostic badges when diagnostics change (debounced via schedule).
+  -- Refresh diagnostic badges when diagnostics change. Debounced (300ms) — LSP
+  -- pushes diagnostics rapidly while typing and a full re-render walks the FS.
+  local diag_timer
   api.nvim_create_autocmd('DiagnosticChanged', {
     callback = function()
-      if S.win and api.nvim_win_is_valid(S.win) then vim.schedule(render) end
+      if not (S.win and api.nvim_win_is_valid(S.win)) then return end
+      if diag_timer then diag_timer:stop() end
+      diag_timer = vim.defer_fn(function()
+        if S.win and api.nvim_win_is_valid(S.win) then render() end
+      end, 300)
     end,
   })
 

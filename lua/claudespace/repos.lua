@@ -566,21 +566,32 @@ function M.terminal()
   vim.notify('Terminal in ' .. fn.fnamemodify(cwd, ':t'), vim.log.levels.INFO)
 end
 
+local function scoped_member(member)
+  return member or M.at(M.active_cwd())
+    or { abspath = M.active_cwd(), label = fn.fnamemodify(M.active_cwd(), ':t') }
+end
+
+-- Launch from a real editor window so the selected file doesn't try to open in
+-- the tree / a winfixbuf window (which silently fails).
+local function in_editor()
+  pcall(function() require('claudespace.claude.util').ensure_editor_win() end)
+end
+
 -- Fuzzy-find files scoped to a single repo (defaults to the active one).
 function M.find_files(member)
-  member = member or M.at(M.active_cwd())
-    or { abspath = M.active_cwd(), label = fn.fnamemodify(M.active_cwd(), ':t') }
+  member = scoped_member(member)
   local ok, tb = pcall(require, 'telescope.builtin')
   if not ok then vim.notify('telescope required for file search', vim.log.levels.WARN); return end
+  in_editor()
   tb.find_files({ cwd = member.abspath, prompt_title = 'Files in ' .. (member.label or '?') })
 end
 
 -- Live-grep scoped to a single repo (defaults to the active one).
 function M.grep_files(member)
-  member = member or M.at(M.active_cwd())
-    or { abspath = M.active_cwd(), label = fn.fnamemodify(M.active_cwd(), ':t') }
+  member = scoped_member(member)
   local ok, tb = pcall(require, 'telescope.builtin')
   if not ok then vim.notify('telescope required for grep', vim.log.levels.WARN); return end
+  in_editor()
   tb.live_grep({ cwd = member.abspath, prompt_title = 'Grep in ' .. (member.label or '?') })
 end
 

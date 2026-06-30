@@ -100,7 +100,8 @@ local function generate_pr()
   end)
 end
 
-vim.keymap.set('n', '<leader>gp', generate_pr, { desc = 'Claude: generate PR description' })
+-- <leader>cP (Claude namespace) — <leader>gp belongs to gitsigns (preview hunk).
+vim.keymap.set('n', '<leader>cP', generate_pr, { desc = 'Claude: generate PR description' })
 
 -- ── Code review ───────────────────────────────────────────────────────────────
 
