@@ -744,7 +744,13 @@ end
 function M.close()
   S._sticky = false   -- intentional close — don't auto-reopen
   if S.win and api.nvim_win_is_valid(S.win) then
-    api.nvim_win_close(S.win, true)
+    local ok = pcall(api.nvim_win_close, S.win, true)
+    if not ok and api.nvim_win_is_valid(S.win) then
+      -- Tree is the last window — can't close it; show an empty buffer instead.
+      api.nvim_set_current_win(S.win)
+      vim.wo[S.win].winfixbuf = false
+      pcall(vim.cmd, 'enew')
+    end
   end
   S.win = nil
 end
