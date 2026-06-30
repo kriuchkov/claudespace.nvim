@@ -191,16 +191,161 @@ function M.commit_all()
   commit_next(dirty, 1)
 end
 
+-- ── #4 Cross-repo grep → Claude ───────────────────────────────────────────────
+
+function M.grep()
+  local members = repos().list()
+  if #members == 0 then vim.notify('No repos in workspace', vim.log.levels.WARN); return end
+  vim.ui.input({ prompt = 'Grep workspace for: ' }, function(pat)
+    if not pat or pat == '' then return end
+    -- Run from the workspace root with relative dirs so matches print as
+    -- `services/wallet/x.go:NN:…` rather than long absolute paths.
+    local root = repos().root()
+    local args = { 'rg', '--line-number', '--no-heading', '--color=never', '--max-count=40' }
+    for _, m in ipairs(members) do args[#args + 1] = m.path end
+    args[#args + 1] = '--'; args[#args + 1] = pat
+    vim.system(args, { cwd = root, text = true }, vim.schedule_wrap(function(res)
+      local out = vim.trim(res.stdout or '')
+      if out == '' then vim.notify('No matches for: ' .. pat, vim.log.levels.INFO); return end
+      local lines = vim.split(out, '\n')
+      if #lines > 250 then
+        lines = vim.list_slice(lines, 1, 250); lines[#lines + 1] = '… (truncated)'
+      end
+      if sessions().active() then
+        local text = 'Workspace matches for `' .. pat .. '`:\n```\n'
+          .. table.concat(lines, '\n') .. '\n```\n'
+        if context().send_to_active(text) then
+          vim.notify(('Sent %d match line(s) to Claude'):format(#lines), vim.log.levels.INFO)
+        end
+      else
+        require('claudespace.claude.util').read_float(lines, ' rg: ' .. pat .. ' ', 'grep')
+        vim.notify('No active Claude session — showing matches (open a session, then <leader>cG)', vim.log.levels.INFO)
+      end
+    end))
+  end)
+end
+
+-- ── #2 Scaffold CLAUDE.md for the active repo ─────────────────────────────────
+
+function M.scaffold_claude_md()
+  local cwd = repos().active_cwd()
+  local m   = repos().at(cwd) or { abspath = cwd, label = fn.fnamemodify(cwd, ':t') }
+  local path = m.abspath .. '/CLAUDE.md'
+
+  local function go()
+    vim.notify('Generating CLAUDE.md for ' .. m.label .. '…', vim.log.levels.INFO)
+    local prompt = 'Analyze this repository and write its CLAUDE.md. Include: a one-line purpose, '
+      .. 'an overview, key directories/files, build & test commands, and important conventions. '
+      .. 'Be concise and concrete. Output ONLY the markdown content, no code fences.'
+    vim.system({ 'claude', '--print', prompt }, { cwd = m.abspath, text = true },
+      vim.schedule_wrap(function(res)
+        if res.code ~= 0 then
+          vim.notify('claude failed: ' .. vim.trim(res.stderr or tostring(res.code)), vim.log.levels.ERROR)
+          return
+        end
+        local content = vim.trim(res.stdout or '')
+        if content == '' then vim.notify('Empty result', vim.log.levels.WARN); return end
+        fn.writefile(vim.split(content, '\n'), path)
+        require('claudespace.claude.util').ensure_editor_win()
+        vim.cmd('edit ' .. fn.fnameescape(path))
+        vim.notify('Wrote ' .. fn.fnamemodify(path, ':~:.') .. ' — review & edit', vim.log.levels.INFO)
+      end))
+  end
+
+  if fn.filereadable(path) == 1 then
+    vim.ui.select({ 'Overwrite', 'Cancel' },
+      { prompt = m.label .. '/CLAUDE.md already exists:' },
+      function(c) if c == 'Overwrite' then go() end end)
+  else
+    go()
+  end
+end
+
+-- ── #8 Pre-commit review of the active repo ───────────────────────────────────
+
+function M.review()
+  local cwd  = repos().active_cwd()
+  local diff = fn.system({ 'git', '-C', cwd, 'diff', '--staged' })
+  if vim.trim(diff) == '' then diff = fn.system({ 'git', '-C', cwd, 'diff', 'HEAD' }) end
+  if vim.trim(diff) == '' then vim.notify('No changes to review', vim.log.levels.INFO); return end
+  vim.notify('Reviewing diff in ' .. fn.fnamemodify(cwd, ':t') .. '…', vim.log.levels.INFO)
+  vim.system(
+    { 'claude', '--print',
+      'Review this diff. List concrete bugs, risks and improvements as short bullets. '
+      .. 'If it looks good, say so briefly.\n\n' .. diff },
+    { cwd = cwd, text = true },
+    vim.schedule_wrap(function(res)
+      local out = res.code == 0 and vim.trim(res.stdout or '')
+        or ('claude failed: ' .. vim.trim(res.stderr or tostring(res.code)))
+      require('claudespace.claude.util').read_float(
+        vim.split(out, '\n'), ' Review: ' .. fn.fnamemodify(cwd, ':t') .. ' ', 'markdown')
+    end))
+end
+
+-- ── #6 Bump a shared package across its dependents ────────────────────────────
+
+function M.bump_dependents()
+  local candidates = repos().depended_upon()
+  if #candidates == 0 then
+    vim.notify('No intra-workspace dependencies detected', vim.log.levels.INFO); return
+  end
+  local labels = {}
+  for _, m in ipairs(candidates) do labels[#labels + 1] = m.path end
+  vim.ui.select(labels, { prompt = 'Bump which package in its dependents?' }, function(choice)
+    if not choice then return end
+    local pkg
+    for _, m in ipairs(candidates) do if m.path == choice then pkg = m end end
+    if not pkg then return end
+    local mod  = repos().module_path(pkg)
+    local deps = repos().dependents(pkg.path)
+    if not mod then vim.notify(pkg.label .. ' has no Go module path', vim.log.levels.WARN); return end
+    if #deps == 0 then vim.notify('Nothing depends on ' .. pkg.path, vim.log.levels.INFO); return end
+
+    vim.ui.select({ 'Run go get @latest + tidy', 'Cancel' },
+      { prompt = ('Update %d dependent(s) of %s?'):format(#deps, pkg.label) },
+      function(c)
+        if c ~= 'Run go get @latest + tidy' then return end
+        vim.notify(('Bumping %s in %d repo(s)…'):format(pkg.label, #deps), vim.log.levels.INFO)
+        local results, done = {}, 0
+        for _, dep in ipairs(deps) do
+          vim.system({ 'sh', '-c', ('go get %s@latest && go mod tidy'):format(mod) },
+            { cwd = dep.abspath, text = true },
+            vim.schedule_wrap(function(res)
+              results[dep.path] = res.code == 0 and 'ok'
+                or ('FAILED: ' .. vim.trim((res.stderr or '') .. (res.stdout or '')))
+              done = done + 1
+              if done == #deps then
+                local lines = { '# Bump ' .. pkg.path .. ' (' .. mod .. ')', '' }
+                for _, d in ipairs(deps) do
+                  lines[#lines + 1] = ('- %s: %s'):format(d.path, results[d.path] or '?')
+                end
+                require('claudespace.claude.util').read_float(lines, ' Bump results ', 'markdown')
+                repos().refresh_status(pkg)
+              end
+            end))
+        end
+      end)
+  end)
+end
+
 -- ── Setup ─────────────────────────────────────────────────────────────────────
 
 function M.setup()
   local map = vim.keymap.set
-  map('n', '<leader>cF', M.add_files,  { silent = true, desc = 'Claude: add cross-repo files to context' })
-  map('n', '<leader>cB', M.broadcast,  { silent = true, desc = 'Claude: broadcast prompt to repos' })
-  map('n', '<leader>cC', M.commit_all, { silent = true, desc = 'Claude: workspace-wide commit' })
+  map('n', '<leader>cF', M.add_files,         { silent = true, desc = 'Claude: add cross-repo files to context' })
+  map('n', '<leader>cB', M.broadcast,         { silent = true, desc = 'Claude: broadcast prompt to repos' })
+  map('n', '<leader>cC', M.commit_all,        { silent = true, desc = 'Claude: workspace-wide commit' })
+  map('n', '<leader>cG', M.grep,              { silent = true, desc = 'Claude: cross-repo grep → Claude' })
+  map('n', '<leader>cM', M.scaffold_claude_md,{ silent = true, desc = 'Claude: scaffold CLAUDE.md (active repo)' })
+  map('n', '<leader>cv', M.review,            { silent = true, desc = 'Claude: review diff (active repo)' })
+  map('n', '<leader>cU', M.bump_dependents,   { silent = true, desc = 'Claude: bump shared package in dependents' })
 
-  api.nvim_create_user_command('ClaudeBroadcast', M.broadcast, { desc = 'Broadcast a Claude task across repos' })
-  api.nvim_create_user_command('ClaudeCommitAll', M.commit_all, { desc = 'Workspace-wide AI commit' })
+  api.nvim_create_user_command('ClaudeBroadcast', M.broadcast,        { desc = 'Broadcast a Claude task across repos' })
+  api.nvim_create_user_command('ClaudeCommitAll', M.commit_all,       { desc = 'Workspace-wide AI commit' })
+  api.nvim_create_user_command('ClaudeGrep',      M.grep,             { desc = 'Cross-repo grep into Claude' })
+  api.nvim_create_user_command('ClaudeScaffoldMd',M.scaffold_claude_md,{ desc = 'Scaffold CLAUDE.md for the active repo' })
+  api.nvim_create_user_command('ClaudeReview',    M.review,           { desc = 'Review the active repo diff' })
+  api.nvim_create_user_command('ClaudeBumpDeps',  M.bump_dependents,  { desc = 'Bump a shared package across dependents' })
 end
 
 return M

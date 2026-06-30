@@ -236,6 +236,35 @@ function M.dependency_graph()
   return graph
 end
 
+function M.module_path(member) return go_module_path(member.abspath) end
+
+-- Members that depend on `path` (reverse edges of the dependency graph).
+function M.dependents(path)
+  local by_path = {}
+  for _, m in ipairs(state.members) do by_path[m.path] = m end
+  local out = {}
+  for from, tos in pairs(M.dependency_graph()) do
+    for _, to in ipairs(tos) do
+      if to == path then out[#out + 1] = by_path[from]; break end
+    end
+  end
+  table.sort(out, function(a, b) return a.path < b.path end)
+  return out
+end
+
+-- Members that at least one other member depends on (bump candidates).
+function M.depended_upon()
+  local set, by_path = {}, {}
+  for _, m in ipairs(state.members) do by_path[m.path] = m end
+  for _, tos in pairs(M.dependency_graph()) do
+    for _, to in ipairs(tos) do set[to] = true end
+  end
+  local out = {}
+  for p in pairs(set) do if by_path[p] then out[#out + 1] = by_path[p] end end
+  table.sort(out, function(a, b) return a.path < b.path end)
+  return out
+end
+
 -- The directory repo-scoped operations (Claude, tests, CLAUDE.md) should run in:
 -- the active repo's root, falling back to cwd in single-repo / no-match cases.
 function M.active_cwd()
