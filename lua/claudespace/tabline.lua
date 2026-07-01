@@ -999,10 +999,20 @@ function M.goto_group(n)
   set_buf_safe(best)
 end
 
--- Jump to the n-th buffer within the CURRENT group (matches the visible per-group
+-- The buffer shown in the center content window (so nav triggered from the tree
+-- or a panel acts on the center's tab, not the panel buffer).
+local function center_buf()
+  local shell = require('claudespace.shell')
+  for _, w in ipairs(vim.api.nvim_list_wins()) do
+    if shell.is_center(w) then return vim.api.nvim_win_get_buf(w) end
+  end
+  return vim.api.nvim_get_current_buf()
+end
+
+-- Jump to the n-th buffer within the center's group (matches the visible per-group
 -- numbers). Used by <A-1..9>.
 function M.goto_buf_n(n)
-  local gid = buf_group[vim.api.nvim_get_current_buf()]
+  local gid = buf_group[center_buf()]
   local idx = 0
   for _, b in ipairs(sorted_bufs(listed_bufs())) do
     if b.gid == gid then
