@@ -51,6 +51,10 @@ local function invalidate()
   vim.cmd 'redrawtabline'
 end
 
+-- Forward-declared so the mouse handlers (defined earlier) can use the safe
+-- buffer switch (defined later).
+local set_buf_safe
+
 -- ── Per-directory persistence ─────────────────────────────────────────────────
 
 local _session_dir_override = nil   -- overridable in tests
@@ -757,7 +761,7 @@ function _G.CSTabSwitch(idx)
     if not (grp and grp.collapsed) then
       visible = visible + 1
       if visible == idx then
-        vim.api.nvim_set_current_buf(b.bufnr)
+        set_buf_safe(b.bufnr)
         return
       end
     end
@@ -765,13 +769,12 @@ function _G.CSTabSwitch(idx)
 end
 
 function _G.CSTabClose(bufnr)
-  if not vim.api.nvim_buf_is_valid(bufnr) then return end
+  if not (bufnr and vim.api.nvim_buf_is_valid(bufnr)) then return end
   buf_group[bufnr] = nil  -- remove from group on close
-  if vim.bo[bufnr].buftype == 'terminal' then
-    M.close_terminal(bufnr)
-  else
-    M.close_normal(bufnr)
-  end
+  pcall(function()
+    if vim.bo[bufnr].buftype == 'terminal' then M.close_terminal(bufnr)
+    else M.close_normal(bufnr) end
+  end)
 end
 
 -- ── Buffer lifecycle ──────────────────────────────────────────────────────────
@@ -802,12 +805,12 @@ end
 
 function M._switch_away(buf)
   local bufs = visible_sorted_bufs()
-  if #bufs <= 1 then vim.cmd 'enew'; return end
+  if #bufs <= 1 then pcall(vim.cmd, 'enew'); return end
   local idx = 1
   for i, b in ipairs(bufs) do if b.bufnr == buf then idx = i; break end end
   local target = bufs[idx < #bufs and idx + 1 or idx - 1]
   if target and vim.api.nvim_get_current_buf() == buf then
-    vim.api.nvim_set_current_buf(target.bufnr)
+    set_buf_safe(target.bufnr)   -- safe: won't E1513 from a winfixbuf window
   end
 end
 
@@ -920,10 +923,13 @@ end
 
 -- ── Navigation ────────────────────────────────────────────────────────────────
 
--- Switch current window to a normal (non-fixed, non-special) buffer.
--- Falls back to wincmd p or finding any suitable window.
-local function set_buf_safe(bufnr)
+-- Switch current window to a normal (non-fixed, non-special) buffer. Never
+-- throws: validates the target and only sets it in a suitable editor window
+-- (so a click while focus is in the tree/a winfixbuf window can't E1513).
+function set_buf_safe(bufnr)
+  if not (bufnr and vim.api.nvim_buf_is_valid(bufnr)) then return end
   local function ok_win(win)
+    if not vim.api.nvim_win_is_valid(win) then return false end
     local b = vim.api.nvim_win_get_buf(win)
     return not vim.wo[win].winfixbuf
         and vim.bo[b].buftype == ''
@@ -931,18 +937,16 @@ local function set_buf_safe(bufnr)
   end
   local cur = vim.api.nvim_get_current_win()
   if not ok_win(cur) then
-    vim.cmd 'wincmd p'
+    pcall(vim.cmd, 'wincmd p')
     cur = vim.api.nvim_get_current_win()
   end
   if not ok_win(cur) then
     for _, w in ipairs(vim.api.nvim_list_wins()) do
-      if vim.api.nvim_win_is_valid(w) and ok_win(w) then
-        vim.api.nvim_set_current_win(w); cur = w; break
-      end
+      if ok_win(w) then pcall(vim.api.nvim_set_current_win, w); cur = w; break end
     end
   end
   if ok_win(cur) then
-    vim.api.nvim_set_current_buf(bufnr)
+    pcall(vim.api.nvim_set_current_buf, bufnr)
   end
 end
 
