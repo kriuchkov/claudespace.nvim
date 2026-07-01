@@ -769,12 +769,7 @@ function _G.CSTabSwitch(idx)
 end
 
 function _G.CSTabClose(bufnr)
-  if not (bufnr and vim.api.nvim_buf_is_valid(bufnr)) then return end
-  buf_group[bufnr] = nil  -- remove from group on close
-  pcall(function()
-    if vim.bo[bufnr].buftype == 'terminal' then M.close_terminal(bufnr)
-    else M.close_normal(bufnr) end
-  end)
+  M.close(bufnr)   -- single safe close path
 end
 
 -- ── Buffer lifecycle ──────────────────────────────────────────────────────────
@@ -973,6 +968,29 @@ function M.goto_n(n)
   if bufs[n] then set_buf_safe(bufs[n].bufnr) end
 end
 
+-- Drop dead-buffer entries from every bufnr-keyed state table.
+function M.prune()
+  for _, t in ipairs { buf_group, buf_labels, M._pinned, buf_order, buf_access } do
+    for k in pairs(t) do
+      if type(k) == 'number' and not vim.api.nvim_buf_is_valid(k) then t[k] = nil end
+    end
+  end
+  invalidate()
+end
+
+-- The single safe entry point for closing a buffer (mouse ✕ and keymaps route
+-- here): dispatches terminal vs normal, then prunes stale state.
+function M.close(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  if not vim.api.nvim_buf_is_valid(bufnr) then return end
+  buf_group[bufnr] = nil
+  pcall(function()
+    if vim.bo[bufnr].buftype == 'terminal' then M.close_terminal(bufnr)
+    else M.close_normal(bufnr) end
+  end)
+  M.prune()
+end
+
 -- Groups in tabline order (first appearance of each gid in the sorted buffers).
 local function ordered_groups()
   local seen, out = {}, {}
@@ -1033,6 +1051,11 @@ end
 function M.setup()
   setup_group_hls()
   vim.api.nvim_create_autocmd('ColorScheme', { callback = setup_group_hls })
+
+  -- Keep state tables free of dead buffers.
+  vim.api.nvim_create_autocmd({ 'BufDelete', 'BufWipeout' }, {
+    callback = function() vim.schedule(M.prune) end,
+  })
 
   -- Persist groups per directory
   vim.api.nvim_create_autocmd('VimLeave', { callback = save_session })
@@ -1103,11 +1126,7 @@ function M.setup()
   local map = vim.keymap.set
   map('n', '<A-,>', M.prev, { silent = true, desc = 'Prev tab' })
   map('n', '<A-.>', M.next, { silent = true, desc = 'Next tab' })
-  map('n', '<A-c>', function()
-    local buf = vim.api.nvim_get_current_buf()
-    if vim.bo[buf].buftype == 'terminal' then M.close_terminal(buf)
-    else M.close_normal(buf) end
-  end, { silent = true, desc = 'Close tab' })
+  map('n', '<A-c>', function() M.close() end, { silent = true, desc = 'Close tab' })
   -- Two-digit quick-jump on the native mapping timeout (terminal-proof, unlike
   -- Alt which many terminals send as Esc+digit):
   --   <leader>G   → group G            (fires after timeoutlen if no 2nd digit)
@@ -1192,10 +1211,7 @@ function M.setup()
   -- Pin / move / close actions
   map('n', '<leader>tp', function() M.toggle_pin() end,
     { silent = true, desc = 'Tab: pin/unpin (float left)' })
-  map('n', '<leader>tw', function()
-    local buf = vim.api.nvim_get_current_buf()
-    if vim.bo[buf].buftype == 'terminal' then M.close_terminal(buf) else M.close_normal(buf) end
-  end, { silent = true, desc = 'Tab: close current' })
+  map('n', '<leader>tw', function() M.close() end, { silent = true, desc = 'Tab: close current' })
   map('n', '<leader>tq', M.close_group,  { silent = true, desc = 'Tab: close group (all its buffers)' })
   map('n', '<leader>to', M.close_others, { silent = true, desc = 'Tab: close others' })
   map('n', '<leader>th', M.close_left,   { silent = true, desc = 'Tab: close to the left' })

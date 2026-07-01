@@ -7,7 +7,7 @@ local api = vim.api
 local ns  = api.nvim_create_namespace('cs_claudebar')
 local SUP = { '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹' }
 
-local S = { win = nil, buf = nil }
+local S = { win = nil, buf = nil, ranges = {} }  -- ranges: { {s, e, session_id} }
 
 local function set_hl()
   local hl = api.nvim_set_hl
@@ -19,16 +19,33 @@ end
 
 local function sessions() return require('claudespace.claude.sessions') end
 
+-- Open the session whose segment sits under the given column.
+local function click_at(col)
+  for _, r in ipairs(S.ranges) do
+    if col >= r[1] and col < r[2] then
+      pcall(function() sessions().open(r[3]) end)
+      return
+    end
+  end
+end
+
 local function ensure_win()
   if not (S.buf and api.nvim_buf_is_valid(S.buf)) then
     S.buf = api.nvim_create_buf(false, true)
     vim.bo[S.buf].bufhidden = 'hide'
     vim.bo[S.buf].filetype  = 'cs_claudebar'
+    local o = { buffer = S.buf, nowait = true, silent = true }
+    vim.keymap.set('n', '<LeftRelease>', function()
+      click_at(api.nvim_win_get_cursor(0)[2])
+    end, o)
+    vim.keymap.set('n', '<CR>', function()
+      click_at(api.nvim_win_get_cursor(0)[2])
+    end, o)
   end
   local cfg = {
     relative = 'editor', row = vim.o.lines - 2 - vim.o.cmdheight, col = 0,
     width = vim.o.columns, height = 1,
-    style = 'minimal', focusable = false, zindex = 30, noautocmd = true,
+    style = 'minimal', focusable = true, zindex = 30, noautocmd = true,
   }
   if S.win and api.nvim_win_is_valid(S.win) then
     api.nvim_win_set_config(S.win, cfg)
@@ -51,6 +68,7 @@ function M.refresh()
   local active = ok and sess.active() or nil
 
   local parts, hls, col = {}, {}, 0
+  S.ranges = {}
   local function add(text, hl)
     hls[#hls + 1] = { col, col + #text, hl }
     parts[#parts + 1] = text
@@ -60,7 +78,9 @@ function M.refresh()
   for i, s in ipairs(list) do
     local grp = (active and s.id == active.id) and 'CSBarActive' or 'CSBarInactive'
     local num = (i <= #SUP) and (SUP[i] .. ' ') or ''
+    local start = col
     add(' ' .. num .. (s.name or 'Chat') .. ' ', grp)
+    S.ranges[#S.ranges + 1] = { start, col, s.id }   -- clickable segment
     add('│', 'CSBarDim')
   end
 
