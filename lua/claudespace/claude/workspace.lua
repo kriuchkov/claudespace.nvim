@@ -337,13 +337,15 @@ end
 
 function M.setup()
   local map = vim.keymap.set
-  map('n', '<leader>cF', M.add_files,         { silent = true, desc = 'Claude: add cross-repo files to context' })
-  map('n', '<leader>cB', M.broadcast,         { silent = true, desc = 'Claude: broadcast prompt to repos' })
-  map('n', '<leader>cC', M.commit_all,        { silent = true, desc = 'Claude: workspace-wide commit' })
-  map('n', '<leader>cG', M.grep,              { silent = true, desc = 'Claude: cross-repo grep → Claude' })
-  map('n', '<leader>cM', M.scaffold_claude_md,{ silent = true, desc = 'Claude: scaffold CLAUDE.md (active repo)' })
-  map('n', '<leader>cv', M.review,            { silent = true, desc = 'Claude: review diff (active repo)' })
-  map('n', '<leader>cU', M.bump_dependents,   { silent = true, desc = 'Claude: bump shared package in dependents' })
+  -- Workspace / fleet actions live under the <leader>cw submenu (were top-level).
+  map('n', '<leader>cwb', M.broadcast,          { silent = true, desc = 'Broadcast prompt to repos' })
+  map('n', '<leader>cwc', M.commit_all,         { silent = true, desc = 'Workspace-wide commit' })
+  map('n', '<leader>cwg', M.grep,               { silent = true, desc = 'Cross-repo grep → Claude' })
+  map('n', '<leader>cws', M.scaffold_claude_md, { silent = true, desc = 'Scaffold CLAUDE.md (active repo)' })
+  map('n', '<leader>cwr', M.review,             { silent = true, desc = 'Review diff (active repo)' })
+  map('n', '<leader>cwu', M.bump_dependents,    { silent = true, desc = 'Bump shared package in dependents' })
+  local ok_wk, wk = pcall(require, 'which-key')
+  if ok_wk and wk.add then wk.add { { '<leader>cw', group = 'workspace' } } end
 
   api.nvim_create_user_command('ClaudeBroadcast', M.broadcast,        { desc = 'Broadcast a Claude task across repos' })
   api.nvim_create_user_command('ClaudeCommitAll', M.commit_all,       { desc = 'Workspace-wide AI commit' })

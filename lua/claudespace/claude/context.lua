@@ -229,11 +229,27 @@ function M.send_diagnostics()
   end
 end
 
+-- One entry point for feeding context to Claude — replaces the old cluster of
+-- six separate keymaps (@mention, tree file, cross-repo, workspace, terminal,
+-- diagnostics).
+function M.add_context()
+  local items = {
+    { 'Current file / selection  (@mention)', function() pcall(vim.cmd, 'ClaudeCodeSend') end },
+    { 'File from the tree',                    function() pcall(vim.cmd, 'ClaudeCodeTreeAdd') end },
+    { 'Cross-repo files…',                     function() require('claudespace.claude.workspace').add_files() end },
+    { 'Workspace context',                     M.inject },
+    { 'Terminal output',                       M.send_terminal_output },
+    { 'Diagnostics',                           M.send_diagnostics },
+  }
+  vim.ui.select(items, {
+    prompt = 'Add to Claude context',
+    format_item = function(x) return x[1] end,
+  }, function(x) if x then x[2]() end end)
+end
+
 function M.setup()
   local map = vim.keymap.set
-  map('n', '<leader>ci', M.inject,               { desc = 'Claude: inject workspace context', silent = true })
-  map('n', '<leader>cT', M.send_terminal_output, { desc = 'Claude: send terminal output',     silent = true })
-  map('n', '<leader>cd', M.send_diagnostics,     { desc = 'Claude: send diagnostics',         silent = true })
+  map('n', '<leader>cA', M.add_context, { desc = 'Claude: add to context…', silent = true })
 
   vim.api.nvim_create_autocmd('User', {
     pattern  = 'ClaudespaceWorkspaceSaved',

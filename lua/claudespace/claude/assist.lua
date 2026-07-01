@@ -236,9 +236,9 @@ end
 
 function M.setup()
   local map = vim.keymap.set
-  map('n', '<leader>c!', M.shell,   { desc = 'Claude: shell command',      silent = true })
-  map('n', '<leader>co', M.docs,    { desc = 'Claude: generate docs',      silent = true })
-  map('n', '<leader>cE', M.compose, { desc = 'Claude: multi-file compose', silent = true })
+  map('n', '<leader>c!',  M.shell,   { desc = 'Claude: shell command',  silent = true })
+  map('n', '<leader>cgd', M.docs,    { desc = 'generate docs',          silent = true })
+  map('n', '<leader>cgm', M.compose, { desc = 'multi-file compose',     silent = true })
 end
 
 return M
