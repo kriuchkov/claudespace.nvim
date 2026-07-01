@@ -117,6 +117,70 @@ local function inline(buf, row, line)
   end
 end
 
+-- ── Tables: align columns to their widest cell ────────────────────────────────
+
+local function is_table_row(l) return l ~= nil and l:match('^%s*|.*|%s*$') ~= nil end
+local function is_sep_row(l)   return l ~= nil and l:match('^%s*|[%s%-:|]+|%s*$') ~= nil end
+
+local function pipe_pos(line)
+  local pos, c = {}, 1
+  while true do local p = line:find('|', c, true); if not p then break end; pos[#pos + 1] = p; c = p + 1 end
+  return pos
+end
+
+-- Render contiguous table blocks with padded columns; mark their rows handled.
+local function render_tables(buf, lines, handled)
+  local i, in_code = 1, false
+  while i <= #lines do
+    if lines[i]:match('^%s*```') then in_code = not in_code; i = i + 1; goto next end
+    if in_code or not is_table_row(lines[i]) or is_sep_row(lines[i]) then i = i + 1; goto next end
+
+    local a = i
+    local b = i
+    while b + 1 <= #lines and is_table_row(lines[b + 1]) do b = b + 1 end
+
+    -- widest raw cell per column
+    local widths = {}
+    for r = a, b do
+      if not is_sep_row(lines[r]) then
+        local p = pipe_pos(lines[r])
+        for k = 1, #p - 1 do
+          local w = vim.fn.strdisplaywidth(lines[r]:sub(p[k] + 1, p[k + 1] - 1))
+          widths[k] = math.max(widths[k] or 0, w)
+        end
+      end
+    end
+
+    for r = a, b do
+      handled[r] = true
+      local row, ln = r - 1, lines[r]
+      if is_sep_row(ln) then
+        local bord = '┼'
+        for k = 1, #widths do bord = bord .. string.rep('─', widths[k]) .. '┼' end
+        mark(buf, row, 0, #ln, { conceal = '' })
+        api.nvim_buf_set_extmark(buf, ns, row, 0,
+          { virt_text = { { bord, 'CSMdTablePipe' } }, virt_text_pos = 'inline' })
+      else
+        if r == a then mark(buf, row, 0, #ln, { hl_group = 'CSMdBold' }) end
+        local p = pipe_pos(ln)
+        for k = 1, #p do
+          local pad = ''
+          if k >= 2 then
+            local w = vim.fn.strdisplaywidth(ln:sub(p[k - 1] + 1, p[k] - 1))
+            pad = string.rep(' ', math.max(0, (widths[k - 1] or 0) - w))
+          end
+          mark(buf, row, p[k] - 1, p[k], { conceal = '' })
+          api.nvim_buf_set_extmark(buf, ns, row, p[k] - 1,
+            { virt_text = { { pad .. '│', 'CSMdTablePipe' } }, virt_text_pos = 'inline' })
+        end
+        inline(buf, row, ln)
+      end
+    end
+    i = b + 1
+    ::next::
+  end
+end
+
 -- ── Full-buffer render ────────────────────────────────────────────────────────
 
 local function render(buf)
@@ -129,10 +193,14 @@ local function render(buf)
   local levels = {}       -- lnum -> fold level string
   has_details[buf] = false
 
+  local handled = {}      -- rows already decorated (tables)
+  render_tables(buf, lines, handled)
+
   for i, line in ipairs(lines) do
     local row = i - 1
     -- default: section depth, one deeper inside a <details> body
     levels[i] = tostring(in_details and (hdepth + 1) or hdepth)
+    if handled[i] then goto cont end
 
     -- fenced code block boundaries + body
     if line:match('^%s*```') then
@@ -217,32 +285,6 @@ local function render(buf)
         virt_text = { { c.icon .. ckind, c.hl } }, virt_text_pos = 'inline',
         line_hl_group = c.hl,
       })
-      goto cont
-    end
-
-    -- table rows: | a | b |  → box pipes, header bold, separator as a border
-    if line:match('^%s*|.*|%s*$') then
-      if line:match('^%s*|[%s%-:|]+|%s*$') then
-        local bord = (line:gsub('[^|]', '─'):gsub('|', '┼'))
-        mark(buf, row, 0, #line, { conceal = '' })
-        api.nvim_buf_set_extmark(buf, ns, row, 0, {
-          virt_text = { { bord, 'CSMdTablePipe' } }, virt_text_pos = 'overlay',
-        })
-        goto cont
-      end
-      local is_header = lines[i + 1] and lines[i + 1]:match('^%s*|[%s%-:|]+|%s*$')
-      if is_header then mark(buf, row, 0, #line, { hl_group = 'CSMdBold' }) end
-      local col = 1
-      while true do
-        local p = line:find('|', col, true)
-        if not p then break end
-        mark(buf, row, p - 1, p, { conceal = '' })
-        api.nvim_buf_set_extmark(buf, ns, row, p - 1, {
-          virt_text = { { '│', 'CSMdTablePipe' } }, virt_text_pos = 'inline',
-        })
-        col = p + 1
-      end
-      inline(buf, row, line)
       goto cont
     end
 
