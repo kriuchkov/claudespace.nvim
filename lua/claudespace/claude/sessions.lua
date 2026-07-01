@@ -45,11 +45,9 @@ local function win_opts()
   vim.wo.scrolloff = 0
 end
 
--- Cluster Claude session tabs into a dedicated 'claude' group (terminals are
--- skipped by auto-grouping, so they'd otherwise drift in the ungrouped zone).
-local function group_claude(buf)
-  pcall(function() require('claudespace.tabline').group_add(buf, 'claude') end)
-end
+-- Claude sessions are shown in the bottom bar (claudespace.claude.bottombar),
+-- not the top tabline — no grouping needed.
+local function group_claude(_) end
 
 -- Build the launch command. flag '' = fresh chat, ' --continue' = resume the
 -- most recent conversation in the cwd, ' --resume' = pick from past sessions.

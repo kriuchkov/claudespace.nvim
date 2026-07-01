@@ -415,6 +415,7 @@ local function listed_bufs()
   for _, b in ipairs(vim.api.nvim_list_bufs()) do
     if not vim.api.nvim_buf_is_valid(b) then goto next end
     if not vim.bo[b].buflisted then goto next end
+    if vim.b[b].cs_session_id then goto next end   -- Claude sessions live in the bottom bar
     if EXCLUDE_FT[vim.bo[b].filetype] then goto next end
     if EXCLUDE_BT[vim.bo[b].buftype] then goto next end
     if not buf_order[b] then order_seq = order_seq + 1; buf_order[b] = order_seq end

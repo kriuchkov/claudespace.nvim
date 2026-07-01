@@ -44,6 +44,7 @@ else
     "claudespace.mdpreview"
     "claudespace.zen"
     "claudespace.mdtoc"
+    "claudespace.claude.bottombar"
     "claudespace.claude.util"
     "claudespace.claude.sessions"
     "claudespace.claude.dashboard"
