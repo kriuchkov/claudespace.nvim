@@ -75,15 +75,27 @@ end
 
 -- ── Jump ──────────────────────────────────────────────────────────────────────
 
+-- Item under the panel cursor.
+local function item_here()
+  return S.line_map[api.nvim_win_get_cursor(S.win)[1]]
+end
+
+-- Scroll the source to the heading under the panel cursor, keeping focus in the
+-- panel (live preview while moving with j/k).
+local function preview()
+  local it = item_here()
+  if not (it and S.source_win and api.nvim_win_is_valid(S.source_win)) then return end
+  pcall(api.nvim_win_set_cursor, S.source_win, { it.lnum, 0 })
+  api.nvim_win_call(S.source_win, function() vim.cmd 'normal! zz' end)
+end
+
+-- <CR>: jump to the heading and move focus into the source window.
 local function jump()
-  local row = api.nvim_win_get_cursor(S.win)[1]
-  local it  = S.line_map[row]
-  if not it then return end
-  if S.source_win and api.nvim_win_is_valid(S.source_win) then
-    api.nvim_set_current_win(S.source_win)
-    pcall(api.nvim_win_set_cursor, S.source_win, { it.lnum, 0 })
-    vim.cmd 'normal! zz'
-  end
+  local it = item_here()
+  if not (it and S.source_win and api.nvim_win_is_valid(S.source_win)) then return end
+  api.nvim_set_current_win(S.source_win)
+  pcall(api.nvim_win_set_cursor, S.source_win, { it.lnum, 0 })
+  vim.cmd 'normal! zz'
 end
 
 -- ── Window ────────────────────────────────────────────────────────────────────
@@ -127,8 +139,12 @@ function M.open(anchor_win)
   api.nvim_create_autocmd('WinClosed', {
     pattern = tostring(S.win), once = true, callback = function() S.win = nil end,
   })
+  -- Live preview: moving with j/k in the panel scrolls the source (focus stays).
+  api.nvim_create_autocmd('CursorMoved', {
+    buffer = S.buf, callback = function() preview() end,
+  })
   render()
-  api.nvim_set_current_win(S.source_win)
+  -- Focus stays in the panel so j/k navigate the TOC immediately.
 end
 
 function M.close()
