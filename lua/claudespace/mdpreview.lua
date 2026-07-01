@@ -367,11 +367,65 @@ function M.toc()
   }):find()
 end
 
+-- ── Yank the fenced code block under the cursor ───────────────────────────────
+
+function M.yank_code()
+  local buf   = api.nvim_get_current_buf()
+  local cur   = api.nvim_win_get_cursor(0)[1]
+  local lines = api.nvim_buf_get_lines(buf, 0, -1, false)
+  local top
+  for i = cur, 1, -1 do if lines[i]:match('^%s*```') then top = i; break end end
+  if not top then vim.notify('Not inside a code block', vim.log.levels.INFO); return end
+  local bot
+  for i = top + 1, #lines do if lines[i]:match('^%s*```') then bot = i; break end end
+  if not bot then return end
+  local body = {}
+  for i = top + 1, bot - 1 do body[#body + 1] = lines[i] end
+  vim.fn.setreg('+', table.concat(body, '\n'))
+  vim.notify(('Yanked %d line(s) of code'):format(#body), vim.log.levels.INFO)
+end
+
+-- ── Focus mode: dim everything but the current section ────────────────────────
+
+local focus_ns = api.nvim_create_namespace('cs_mdfocus')
+local focus_on = {}   -- bufnr -> true
+
+local function apply_focus(buf)
+  api.nvim_buf_clear_namespace(buf, focus_ns, 0, -1)
+  if not focus_on[buf] then return end
+  local cur   = api.nvim_win_get_cursor(0)[1]
+  local lines = api.nvim_buf_get_lines(buf, 0, -1, false)
+  local top, bot = 1, #lines
+  for i = cur, 1, -1 do if lines[i]:match('^#+%s') then top = i; break end end
+  for i = cur + 1, #lines do if lines[i]:match('^#+%s') then bot = i - 1; break end end
+  for i = 1, #lines do
+    if (i < top or i > bot) and #lines[i] > 0 then
+      pcall(api.nvim_buf_set_extmark, buf, focus_ns, i - 1, 0, {
+        end_col = #lines[i], hl_group = 'CSMdDim', priority = 200, hl_eol = true,
+      })
+    end
+  end
+end
+
+function M.focus_toggle(buf)
+  buf = buf or api.nvim_get_current_buf()
+  focus_on[buf] = not focus_on[buf] or nil
+  apply_focus(buf)
+  vim.notify('Focus mode ' .. (focus_on[buf] and 'on' or 'off'), vim.log.levels.INFO)
+end
+
 -- ── Setup ─────────────────────────────────────────────────────────────────────
 
 function M.setup()
   setup_highlights()
-  api.nvim_create_autocmd('ColorScheme', { callback = setup_highlights })
+  api.nvim_set_hl(0, 'CSMdDim', { fg = '#3b4261' })
+  api.nvim_create_autocmd('ColorScheme', { callback = function()
+    setup_highlights(); api.nvim_set_hl(0, 'CSMdDim', { fg = '#3b4261' })
+  end })
+
+  api.nvim_create_autocmd('CursorMoved', {
+    callback = function(a) if focus_on[a.buf] then apply_focus(a.buf) end end,
+  })
 
   vim.keymap.set('n', '<leader>mp', function() M.toggle() end,
     { silent = true, desc = 'Markdown preview (toggle)' })
@@ -389,6 +443,10 @@ function M.setup()
         vim.tbl_extend('force', o, { desc = 'Prev heading' }))
       vim.keymap.set('n', '<leader>mt', M.toc,
         vim.tbl_extend('force', o, { desc = 'Markdown: table of contents' }))
+      vim.keymap.set('n', '<leader>mf', function() M.focus_toggle(a.buf) end,
+        vim.tbl_extend('force', o, { desc = 'Markdown: focus current section' }))
+      vim.keymap.set('n', 'yc', M.yank_code,
+        vim.tbl_extend('force', o, { desc = 'Yank code block' }))
     end,
   })
   api.nvim_create_autocmd({ 'TextChanged', 'TextChangedI', 'InsertLeave' }, {
