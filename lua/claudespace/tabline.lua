@@ -1010,9 +1010,11 @@ local function center_buf()
 end
 
 -- Jump to the n-th buffer within the center's group (matches the visible per-group
--- numbers). Used by <A-1..9>.
+-- numbers). Used by <A-1..9>. When the center shows a Claude session / ungrouped
+-- buffer, fall back to the first tab group so file tabs stay reachable.
 function M.goto_buf_n(n)
   local gid = buf_group[center_buf()]
+  if not gid then gid = ordered_groups()[1] end
   local idx = 0
   for _, b in ipairs(sorted_bufs(listed_bufs())) do
     if b.gid == gid then
@@ -1020,6 +1022,9 @@ function M.goto_buf_n(n)
       if idx == n then set_buf_safe(b.bufnr); return end
     end
   end
+  -- No matching group buffer (e.g. all ungrouped): fall back to the n-th visible.
+  local vis = visible_sorted_bufs()
+  if vis[n] then set_buf_safe(vis[n].bufnr) end
 end
 
 -- Open the b-th buffer within the g-th group.

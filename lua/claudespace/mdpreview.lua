@@ -128,6 +128,15 @@ local function pipe_pos(line)
   return pos
 end
 
+-- Displayed width of a cell after inline() hides link URLs and **/`` markers
+-- (padding must match what is actually shown, or the columns drift).
+local function cell_width(s)
+  s = s:gsub('%[([^%]\n]+)%]%([^%)\n]+%)', '%1')  -- [text](url) → text
+  s = s:gsub('%*%*([^%*\n]+)%*%*', '%1')            -- **bold** → bold
+  s = s:gsub('`([^`\n]+)`', '%1')                    -- `code` → code
+  return vim.fn.strdisplaywidth(s)
+end
+
 -- Render contiguous table blocks with padded columns; mark their rows handled.
 local function render_tables(buf, lines, handled)
   local i, in_code = 1, false
@@ -145,7 +154,7 @@ local function render_tables(buf, lines, handled)
       if not is_sep_row(lines[r]) then
         local p = pipe_pos(lines[r])
         for k = 1, #p - 1 do
-          local w = vim.fn.strdisplaywidth(lines[r]:sub(p[k] + 1, p[k + 1] - 1))
+          local w = cell_width(lines[r]:sub(p[k] + 1, p[k + 1] - 1))
           widths[k] = math.max(widths[k] or 0, w)
         end
       end
@@ -166,7 +175,7 @@ local function render_tables(buf, lines, handled)
         for k = 1, #p do
           local pad = ''
           if k >= 2 then
-            local w = vim.fn.strdisplaywidth(ln:sub(p[k - 1] + 1, p[k] - 1))
+            local w = cell_width(ln:sub(p[k - 1] + 1, p[k] - 1))
             pad = string.rep(' ', math.max(0, (widths[k - 1] or 0) - w))
           end
           mark(buf, row, p[k] - 1, p[k], { conceal = '' })
