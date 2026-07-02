@@ -4,6 +4,7 @@
 local M = {}
 
 local api = vim.api
+local fn  = vim.fn
 local ns  = api.nvim_create_namespace('cs_mdpreview')
 
 local HEAD_ICON = { '󰉫 ', '󰉬 ', '󰉭 ', '󰉮 ', '󰉯 ', '󰉰 ' }
