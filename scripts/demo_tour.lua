@@ -1,4 +1,4 @@
--- Self-driving tour of claudespace.nvim for asciinema recordings.
+-- Self-driving tour of workspace.nvim for asciinema recordings.
 --
 -- Loaded by `scripts/demo.sh <target> tour`. Walks the headline features on a
 -- timer with on-screen captions via direct module calls, then quits so the
@@ -61,7 +61,7 @@ end
 local function close_aux_terminals()
   for _, w in ipairs(api.nvim_list_wins()) do
     local ok, b = pcall(api.nvim_win_get_buf, w)
-    if ok and vim.bo[b].buftype == 'terminal' and not vim.b[b].cs_session_id then
+    if ok and vim.bo[b].buftype == 'terminal' then
       pcall(api.nvim_win_close, w, true)
     end
   end
@@ -71,7 +71,7 @@ end
 -- replace a Claude terminal), so files always land in the main area.
 local function edit(path)
   if not path then return end
-  local sh, win = mod('claudespace.shell'), nil
+  local sh, win = mod('workspace.shell'), nil
   if sh then pcall(function() win = sh.center(); api.nvim_set_current_win(win) end) end
   if win and api.nvim_win_is_valid(win) then pcall(function() vim.wo[win].winfixbuf = false end) end
   pcall(vim.cmd, 'edit ' .. fn.fnameescape(path))
@@ -84,17 +84,17 @@ end
 -- ── Steps ────────────────────────────────────────────────────────────────────────
 -- Each step: { delay_after_ms, caption, action }.
 local steps = {
-  { 1900, 'claudespace.nvim — a multi-repo workspace', function() end },
+  { 1900, 'workspace.nvim — a multi-repo workspace', function() end },
 
   { 2600, '\\   file tree — services/ opens to its repo roots (git status each)',
     function()
-      local ft = mod('claudespace.filetree')
+      local ft = mod('workspace.filetree')
       -- focus_path opens the tree (if closed) and expands services/ + ancestors.
       if ft then pcall(ft.focus_path, fn.getcwd() .. '/services') end
     end },
 
   { 2600, '<leader>wp   repos overview — branches, active repo',
-    function() local r = mod('claudespace.repos'); if r and r.show then pcall(r.show) end end },
+    function() local r = mod('workspace.repos'); if r and r.show then pcall(r.show) end end },
 
   { 1400, '', function() close_floats() end },
 
@@ -117,45 +117,34 @@ local steps = {
     end },
 
   { 2200, '<leader>xo   symbols outline (cursor-synced)',
-    function() local o = mod('claudespace.outline'); if o then pcall(o.toggle) end end },
+    function() local o = mod('workspace.outline'); if o then pcall(o.toggle) end end },
 
-  { 1400, '', function() local o = mod('claudespace.outline'); if o then pcall(o.toggle) end end },
+  { 1400, '', function() local o = mod('workspace.outline'); if o then pcall(o.toggle) end end },
 
   { 3000, '<leader>ru   run the active repo\'s tests',
     function()
       edit(main_file)   -- ensure the active repo (services/vega) is current
-      local t = mod('claudespace.tasks'); if t and t.run then pcall(t.run, 'test') end
+      local t = mod('workspace.tasks'); if t and t.run then pcall(t.run, 'test') end
     end },
 
-  { 2600, 'Fleet: <leader>cwb broadcast · cwg cross-repo grep · cwc commit-all · cwu bump shared lib',
-    function() close_aux_terminals(); close_floats(); edit(main_file) end },
-
-  -- Claude sessions boot the CLI (~2-3s); one action per step, long pauses.
-  { 3600, '<leader>cn   a Claude session, bound to the active repo',
-    function() local s = mod('claudespace.claude.sessions'); if s then pcall(s.new) end end },
-
-  { 3600, '<leader>cn again   a second session joins the bottom bar',
-    function() local s = mod('claudespace.claude.sessions'); if s then pcall(s.new) end end },
-
-  { 2800, '<A-h> / <A-l>   cycle between the sessions',
-    function() local s = mod('claudespace.claude.sessions'); if s then pcall(s.prev) end end },
+  { 1600, '', function() close_aux_terminals(); close_floats(); edit(main_file) end },
 
   { 2800, '<leader>mp   markdown preview: tables, callouts, <details>',
     function()
       edit(doc_file)
-      local md = mod('claudespace.mdpreview'); if md then pcall(md.enable, 0) end
+      local md = mod('workspace.mdpreview'); if md then pcall(md.enable, 0) end
     end },
 
   { 2200, ']l / <CR>   jump between & follow links',
-    function() local md = mod('claudespace.mdpreview'); if md then pcall(md.goto_link, 1) end end },
+    function() local md = mod('workspace.mdpreview'); if md then pcall(md.goto_link, 1) end end },
 
   { 2000, '<leader>ub   theme to light…',
-    function() local th = mod('claudespace.theme'); if th then th.set('light') end end },
+    function() local th = mod('workspace.theme'); if th then th.set('light') end end },
 
   { 1700, '…and back to dark',
-    function() local th = mod('claudespace.theme'); if th then th.set('dark') end end },
+    function() local th = mod('workspace.theme'); if th then th.set('dark') end end },
 
-  { 3000, 'Try it:  scripts/demo.sh   ·   github.com/kriuchkov/claudespace.nvim',
+  { 3000, 'Try it:  scripts/demo.sh   ·   github.com/kriuchkov/workspace.nvim',
     function() end },
 }
 

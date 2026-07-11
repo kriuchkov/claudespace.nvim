@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Launch claudespace.nvim on a demo so you can try it hands-on.
+# Launch workspace.nvim on a demo so you can try it hands-on.
 #
 #   scripts/demo.sh                   # multi-repo workspace (default)
 #   scripts/demo.sh workspace tour    # self-driving tour (for asciinema)
@@ -7,7 +7,7 @@
 #   scripts/demo.sh rust              # single Rust repo
 #
 # The demos live inside this repo, so opening them in place would make
-# claudespace treat the whole claudespace.nvim checkout as the workspace root.
+# workspace treat the whole workspace.nvim checkout as the workspace root.
 # Instead we stage a clean, tracked-only snapshot into throwaway git repo(s)
 # under $TMPDIR and open THAT — so the tree, workspace, git, and LSP see only
 # the demo. For the multi-repo workspace, each member (services/*, libs/*) is
@@ -31,7 +31,7 @@ case "$TARGET" in
   *)         ENTRY="." ;;
 esac
 
-GIT_ID=(-c user.name=claudespace -c user.email=demo@claudespace.nvim -c commit.gpgsign=false)
+GIT_ID=(-c user.name=workspace -c user.email=demo@workspace.nvim -c commit.gpgsign=false)
 init_repo() {
   git -C "$1" init -q
   git -C "$1" "${GIT_ID[@]}" add -A
@@ -39,7 +39,7 @@ init_repo() {
 }
 
 # Stage a tracked-only snapshot (no build artifacts, no nested .git).
-STAGE="${TMPDIR:-/tmp}/claudespace-demo-$TARGET"
+STAGE="${TMPDIR:-/tmp}/workspace-demo-$TARGET"
 rm -rf "$STAGE"; mkdir -p "$STAGE"
 git -C "$ROOT" archive "HEAD:demo/$TARGET" | tar -x -C "$STAGE"
 
@@ -62,26 +62,26 @@ if [[ "$MODE" == "tour" ]]; then
   NVIM_ARGS+=(-c "luafile $ROOT/scripts/demo_tour.lua")
 fi
 
-# Pick how to run nvim with the claudespace config:
+# Pick how to run nvim with the workspace config:
 #   1. NVIM_APPNAME already set → respect it
-#   2. ~/.config/claudespace exists (dev symlink) → NVIM_APPNAME=claudespace
+#   2. ~/.config/workspace exists (dev symlink) → NVIM_APPNAME=workspace
 #   3. this repo IS ~/.config/nvim → plain nvim
 #   4. otherwise → source this repo's init.lua directly
 run_nvim() {
   if [[ -n "${NVIM_APPNAME:-}" ]]; then
     nvim "$@"
-  elif [[ -d "$HOME/.config/claudespace" ]]; then
-    NVIM_APPNAME=claudespace nvim "$@"
+  elif [[ -d "$HOME/.config/workspace" ]]; then
+    NVIM_APPNAME=workspace nvim "$@"
   elif [[ "$ROOT" -ef "$HOME/.config/nvim" ]]; then
     nvim "$@"
   else
     # Not installed as a config: run this checkout directly. --cmd runs before
     # init.lua, so putting the repo on rtp/packpath first lets `require
-    # 'claudespace.*'` resolve. (First run installs plugins via vim.pack.)
+    # 'workspace.*'` resolve. (First run installs plugins via vim.pack.)
     nvim --cmd "set rtp^=$ROOT packpath^=$ROOT" -u "$ROOT/init.lua" "$@"
   fi
 }
 
-echo "Starting claudespace demo: $TARGET  ($DIR)${MODE:+  [$MODE]}"
+echo "Starting workspace demo: $TARGET  ($DIR)${MODE:+  [$MODE]}"
 cd "$DIR"
 run_nvim "${NVIM_ARGS[@]}"

@@ -1,7 +1,7 @@
 # 🛰️ orbit — a multi-repo workspace
 
-Several git repos under one claudespace workspace (see
-[`.claudespace/workspace.json`](.claudespace/workspace.json)), grouped like a
+Several git repos under one workspace (see
+[`.workspace/workspace.json`](.workspace/workspace.json)), grouped like a
 real monorepo. Toggle this preview with `<leader>mp`; follow links with `<CR>`.
 
 > [!NOTE]
@@ -20,13 +20,12 @@ real monorepo. Toggle this preview with `<leader>mp`; follow links with `<CR>`.
 | frontends | [`aurora`](frontends/aurora/src/main.rs) | Rust | renders the greeting |
 | — | [`deploy`](deploy/docker-compose.yml) | yaml | wires it all together |
 
-## Fleet — act across every repo
+## Workspace — the set of repos
 
 - [ ] `<leader>wp` — repos overview (branches, dirty state)
-- [ ] `<leader>cwb` — broadcast a prompt to all repos
-- [ ] `<leader>cwg` — cross-repo grep → Claude
-- [ ] `<leader>cwc` — one workspace-wide commit
-- [ ] `<leader>cwu` — bump the shared `nebula` package in its dependents
+- [ ] `<leader>ws` / `<leader>wl` — switch / list workspaces
+- [ ] `<leader>fR` — live grep scoped to the active repo
+- [ ] `F` in the source-control panel — fast-forward-pull every repo at once
 
 ## Per repo
 
@@ -34,15 +33,15 @@ real monorepo. Toggle this preview with `<leader>mp`; follow links with `<CR>`.
 - [ ] `<leader>ru` — run the active repo's tests
 - [ ] `gd` on `Greeter` — LSP across the Go modules (`go.work`)
 - [ ] `<leader>cC` — run a `.claude/commands/*.md` in the background
-- [ ] `<leader>cn` — a Claude session, bound to the active repo
+- [ ] `<leader>gc` — a commit message for the active repo's staged diff
 
 <details>
 <summary>Why a workspace?</summary>
 
 Real work spans services, shared packages, a frontend and deploy config.
-claudespace makes the *set* of repos the unit you operate on — switch the active
+workspace makes the *set* of repos the unit you operate on — switch the active
 one, or fan a task out to all of them — without leaving the editor.
 
 </details>
 
-Repo: [github.com/kriuchkov/claudespace.nvim](https://github.com/kriuchkov/claudespace.nvim)
+Repo: [github.com/kriuchkov/workspace.nvim](https://github.com/kriuchkov/workspace.nvim)

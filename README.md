@@ -1,12 +1,12 @@
-# claudespace.nvim
+# workspace.nvim
 
-### Neovim, rebuilt as an AI-native IDE — a native frontend for Claude Code.
+### Neovim, rebuilt as a multi-repo **workspace** IDE.
 
-Not "Neovim + a Claude plugin." An **environment** where Claude is part of the editor: sessions live in a dock, past conversations are browsable and resumable, context is fed in automatically, and one keystroke drives Claude across every repo in your workspace. The tabline, tree, statusline, source-control panel, markdown preview, and the dark/light theme are all plain, forkable Lua — **no lazy.nvim, no neo-tree, no lualine, no external colorscheme.** Built on `vim.pack` (Neovim 0.12).
+Not a plugin pack — an **environment** built around real workspaces: many repos under one root, an active-repo context that Git, the tree, find, and tasks all follow, named layout snapshots you switch in a keystroke, and a fixed region shell so the editor never splits by accident. The tabline, tree, statusline, source-control panel, markdown preview, and the dark/light theme are all plain, forkable Lua — **no lazy.nvim, no neo-tree, no lualine, no external colorscheme.** Built on `vim.pack` (Neovim 0.12).
 
-![claudespace demo](docs/demo.gif)
+Optional, headless **Claude Code helpers** (commit messages, review, PR text, generate, fix) are included but never in the way — they shell out to the official `claude` CLI only when you invoke them.
 
-> **Built on Claude Code.** claudespace is a **wrapper around [Claude Code](https://www.anthropic.com/claude-code)** — it drives the official `claude` CLI through its documented interfaces (`--print`, `--output-format stream-json`, `--resume`) using *your* existing Claude Code login, `CLAUDE.md`, MCP servers, and permission settings. There is no reimplemented API and nothing is bypassed, so every AI action stays fully within [Claude Code's terms of use](https://www.anthropic.com/legal/consumer-terms). See [Built on Claude Code](#built-on-claude-code).
+![workspace demo](docs/demo.gif)
 
 ```
 top bar  ┃ tabs (buffer groups)
@@ -16,85 +16,57 @@ top bar  ┃ tabs (buffer groups)
  bar +   ┃   (the one content     ┃  / TOC
  panels  ┃    window)             ┃
 ─────────╂───────────────────────────────
-bottom   ┃ Claude sessions ¹ ² ³
+ status  ┃ mode · repo · git · diagnostics · position
 ```
 
-> **One region layout.** Everything opens in a single center window — files, buffers, and Claude tabs — so the editor never splits by accident.
+> **One region layout.** Everything opens in a single center window — files and buffers — so the editor never splits by accident.
 
 ## Try it in 60 seconds
 
 ```bash
-git clone https://github.com/kriuchkov/claudespace.nvim
-cd claudespace.nvim
-scripts/demo.sh go       # or: rust  — opens a real project in claudespace
+git clone https://github.com/kriuchkov/workspace.nvim
+cd workspace.nvim
+scripts/demo.sh go       # or: rust  — opens a real project in workspace
 ```
 
-The GIF above is the [`orbit`](demo/workspace) demo: a real multi-repo workspace (Go + Rust services, a shared package, a frontend, deploy). Two smaller single-repo [demos](demo) (Go & Rust) come with tasks, tests, a `CLAUDE.md`, and a `/review` command — poke at LSP, the test runner, markdown preview, the theme toggle, and Claude actions immediately. See [demo/README.md](demo/README.md) for the guided tour.
+The GIF above is the [`orbit`](demo/workspace) demo: a real multi-repo workspace (Go + Rust services, a shared package, a frontend, deploy). Two smaller single-repo [demos](demo) (Go & Rust) come with tasks, tests and a `CLAUDE.md` — poke at LSP, the test runner, markdown preview, the theme toggle, and the AI helpers immediately. See [demo/README.md](demo/README.md) for the guided tour.
 
-## Why claudespace?
+## Why workspace?
 
-**Claude Code, with a real IDE around it.** You already trust the `claude` CLI — claudespace gives it a home: multiple sessions in a dock, a browsable history of every past conversation, automatic project context, commit messages from diffs, and code review straight into the quickfix list. Claude always knows which repo you're in, and **Fleet** commands drive it across every repo in the workspace at once.
+**Workspaces are real.** Save a named snapshot of your layout, open files, and buffer groups; switch projects in one keypress and come back exactly where you left off. A workspace can span many repos under one root — a **multi-repo manifest** names them, and one is always the **active repo** that Git, the tree, find, and the task runner follow.
 
-**Nothing is hidden.** The runner speaks Claude Code's structured `stream-json` protocol, so answers stream in live, tool activity is visible, and you see exact cost and turn counts per run — and can cancel a long job. No terminal scraping, no guessing when it's done.
-
-**Your sessions are yours.** Every past conversation in `~/.claude/projects` is listed in the activity bar with a title and a transcript preview — resume it (`claude --resume`), read it, or delete it, without leaving the editor.
-
-**A real region layout.** One fixed shell: **top bar** (tabs) · **left / center / right** (activity bar + panels, the single content window, outline/TOC) · **bottom bar** (Claude sessions). Every file, buffer, and Claude tab opens in the one center window — nothing splits the editor by accident.
+**A real region layout.** One fixed shell: **top bar** (tabs) · **left / center / right** (activity bar + panels, the single content window, outline/TOC) · **status bar**. Every file and buffer opens in the one center window — nothing splits the editor by accident.
 
 **You own every pixel.** No barbar, no neo-tree, no lualine, no external colorscheme. The tabline, file tree, statusline, winbar, markdown preview, and the dark+light theme are all plain Lua — readable, forkable, and fast.
 
-**Zero plugin manager overhead.** Uses `vim.pack`, the package manager built into Neovim 0.12. No lazy.nvim bootstrap, no startup time tax.
+**Zero plugin-manager overhead.** Uses `vim.pack`, the package manager built into Neovim 0.12. No lazy.nvim bootstrap, no startup-time tax.
 
-**Workspaces are real.** Save a named snapshot of your layout, open files, buffer groups, terminal slots, and Claude sessions — each session restored on its *own* conversation. Switch projects in one keypress, come back exactly where you left off.
-
----
-
-## Built on Claude Code
-
-claudespace does **not** talk to the Anthropic API directly. It is a **frontend for [Claude Code](https://www.anthropic.com/claude-code)** and shells out to the official `claude` binary you already have installed and logged in.
-
-- **Same CLI, documented flags.** Interactive sessions run `claude` in a terminal buffer; background work uses `claude --print --output-format stream-json --verbose` and `--resume <id>` — all public, supported interfaces. Session history is read from your local `~/.claude/projects` transcript files.
-- **Your setup, unchanged.** It reuses your existing Claude Code authentication, `~/.claude` config, project `CLAUDE.md`, MCP servers, permission mode, and slash commands. claudespace adds no API keys and stores no credentials of its own.
-- **Nothing reverse-engineered or bypassed.** No reimplemented API, no scraping of internal state, no working around usage limits or permissions — a tool Claude Code denies is surfaced to you, not circumvented.
-- **Terms of use.** Because every AI action is just the official CLI doing what you would do by hand, using claudespace stays entirely within [Claude Code's Terms of Use](https://www.anthropic.com/legal/consumer-terms) and whatever plan your `claude` login is on. A valid Claude Code installation and login are required; claudespace is independent, open editor tooling *around* it.
+**AI when you want it, invisible when you don't.** The optional helpers speak Claude Code's structured `stream-json` protocol, so answers stream in live, tool activity is visible, and you see exact cost and turn counts per run — and can cancel a long job (`<leader>cx`). Nothing runs unless you ask.
 
 ---
 
 ## Features
 
-### AI (Claude)
-- **Multi-session** — several independent Claude sessions in a bottom bar, numbered and clickable; restored on their own conversation (`--resume <id>`) after a restart
-- **Session history** — an activity-bar panel of every past conversation in `~/.claude/projects`, newest first, with a title and a live transcript preview; press `⏎` to resume, `C-o` to read it in full, `C-d` to delete
-- **Structured runner** — background commands run through Claude Code's `stream-json` protocol: tokens stream in live, tool activity is shown, and you get the real result plus exact cost / turn count — cancel anytime (`<leader>cx`)
-- **Tasks** — an activity-bar launcher for your `.claude/commands/*.md`, with their descriptions and argument prompts (`⏎` runs, filling in the command's `argument-hint`)
-- **Fleet / multi-repo** — broadcast a prompt to every repo, workspace-wide commit, cross-repo grep, scaffold `CLAUDE.md`, bump a shared package in dependents
-- **Commit messages** — conventional commits from the staged diff via `claude --print`
-- **Inline editing** — select, describe the change, preview the diff, apply
-- **Generate** — tests, docs, code at cursor, multi-file compose (auto-detects Go / Rust / Python / JS)
-- **Code review** — findings as a float + quickfix list with line numbers
-- **PR description** — title + body from commits and the diff vs the base branch
-- **Context** — inject workspace context (git status, recent files, README) into a session on demand; send diagnostics / terminal output / shell output too
-
 ### Workspace (multi-repo)
-- Named workspaces with full persistence: layout, open files, buffer groups, Claude sessions
-- Multi-repo manifest with an **active repo**; Git, tree, find, and Claude are all repo-aware
+- Named workspaces with full persistence: layout, open files, buffer groups, active repo
+- Multi-repo manifest (`.workspace/workspace.json`) with an **active repo**; Git, tree, find and tasks are all repo-aware
 - Repos overview + repo info card; per-repo terminal in the active repo's cwd
 - Home screen on bare `nvim` — workspace list with git branches and recent files
 - Project templates — scaffold Go / TypeScript / Python / Rust / Lua plugin with `tasks.json`
 
 ### Editor & UI
 - **Own dark + light theme** that follows the terminal — Neovim's OSC 11 detection and OS light/dark notifications switch it live; toggle with `<leader>ub`
-- **Region shell** — top tabs / left+right panels / center content / bottom Claude bar
+- **Region shell** — top tabs / left+right panels / center content / status bar
 - **Chrome-style buffer groups** — coloured, collapsible, persistent per directory
 - **Markdown preview** (in-buffer, no plugins) — headings, tables aligned to the widest cell, `<details>/<summary>` folds, GitHub callouts, task lists, TOC panel, link navigation, zen/focus reading mode
 - Custom **file tree** — repo roots, git status icons, gitignore dimming, diagnostic badges, create/move/rename/delete with open-buffer sync
-- **Activity bar** (VS Code-style) — Explorer, Search, Git, Outline, Diagnostics, Tasks, Sessions and more; press `?` to reveal each icon's hotkey
+- **Activity bar** (VS Code-style) — Explorer, Search, Git, Outline, Diagnostics, Tasks and more; press `?` to reveal each icon's hotkey
 - **JSON tools** — `<leader>=` pretty-formats a buffer via `jq`; `<leader>uj` shows it pretty read-only (file untouched)
 - **Keymap cheatsheet** (`<leader>?`) built from your live `<leader>` maps, plus which-key
 - **Directory dashboard** (replaces netrw), **LSP outline** panel, **winbar** breadcrumb, **notifications** center, per-workspace **quick marks**, **command palette**
 
 ### Git
-- **Multi-repo source control** — a VS Code-style panel: every workspace repo with its branch and dirty/ahead/behind, nested under group dirs like the tree; a repo that is also a container folds; pick one and its staging view (stage/unstage, diff, commit with a Claude message, push) opens in the center window; `F` fast-forward-pulls every repo at once
+- **Multi-repo source control** — a VS Code-style panel: every workspace repo with its branch and dirty/ahead/behind, nested under group dirs like the tree; pick one and its staging view (stage/unstage, diff, commit, push) opens in the center window; `F` fast-forward-pulls every repo at once
 - Git status icons in the file tree; gitsigns inline hunks; Lazygit
 
 ### Development
@@ -102,22 +74,36 @@ claudespace does **not** talk to the Anthropic API directly. It is a **frontend 
 - **Scoped live grep** — ripgrep regex plus on-the-fly `--glob` scoping to a file type or a single service (`*.go`, `!*_test.go`, `services/vega/**`), no extra plugins
 - LSP, Treesitter, nvim-cmp, DAP — the modern stack via `vim.pack`
 
+### AI helpers (optional, via Claude Code)
+Headless, on-demand — each runs `claude --print --output-format stream-json` and returns to the editor. No terminal, no background sessions.
+- **Commit messages** — conventional commits from the staged diff (`<leader>gc`)
+- **Code review** — findings as a float + quickfix list with line numbers (`<leader>cgr`)
+- **PR description** — title + body from commits and the diff vs the base branch (`<leader>cgp`)
+- **Generate** — tests, docs, code at cursor, multi-file compose (auto-detects Go / Rust / Python / JS)
+- **Inline editing** — select, describe the change, preview the diff, apply (`<leader>cge`)
+- **Fix / explain** — fix the diagnostic under the cursor (`<leader>cf`), explain code (`<leader>ck`)
+- **Commands** — run your `.claude/commands/*.md` with their argument prompts (`<leader>cC`)
+- **Structured runner** — tokens stream live, tool activity shown, exact cost / turn count, cancel anytime (`<leader>cx`)
+- **[claudecode.nvim](https://github.com/coder/claudecode.nvim)** wiring (optional) — share cursor/selection/diagnostics with a Claude Code you run in a real terminal; accept/reject its inline diffs (`<leader>cy` / `<leader>cY`)
+
+> **On Claude Code.** These helpers are a thin **frontend for [Claude Code](https://www.anthropic.com/claude-code)**: they shell out to the official `claude` binary you already have installed and logged in, using documented flags (`--print`, `--output-format stream-json`) and your existing `~/.claude` config, `CLAUDE.md`, MCP servers and permission mode. No API keys, nothing reverse-engineered — every AI action stays within [Claude Code's Terms of Use](https://www.anthropic.com/legal/consumer-terms). They are entirely optional; `workspace` is a full editor without them.
+
 ---
 
 ## Requirements
 
 - **Neovim ≥ 0.12** (vim.pack required)
-- **`claude` CLI** installed and authenticated (`claude --version`)
 - **A Nerd Font** in your terminal (icons)
 - Git in `$PATH`
 - A terminal that reports its background (OSC 11) for automatic dark/light — otherwise use `<leader>ub`
+- *Optional:* the **`claude` CLI** installed and authenticated (`claude --version`), only for the AI helpers
 
 ---
 
 ## Installation
 
 ```bash
-git clone https://github.com/kriuchkov/claudespace.nvim ~/.config/nvim
+git clone https://github.com/kriuchkov/workspace.nvim ~/.config/nvim
 nvim
 ```
 
@@ -126,9 +112,9 @@ Plugins install automatically on first launch via `vim.pack`.
 ### Development (separate config)
 
 ```bash
-git clone https://github.com/kriuchkov/claudespace.nvim ~/claudespace.nvim
-ln -s ~/claudespace.nvim ~/.config/claudespace
-NVIM_APPNAME=claudespace nvim
+git clone https://github.com/kriuchkov/workspace.nvim ~/workspace.nvim
+ln -s ~/workspace.nvim ~/.config/workspace
+NVIM_APPNAME=workspace nvim
 ```
 
 ### Verify
@@ -138,31 +124,40 @@ bash scripts/check.sh        # syntax + module load + unit tests
 ```
 
 ```
-:checkhealth claudespace     # inside Neovim
+:checkhealth workspace       # inside Neovim
 ```
 
 ---
 
 ## Keymaps
 
-`<leader>` is `Space`. Alt keys work across regions, including inside the Claude terminal.
+`<leader>` is `Space`.
 
-### Claude — sessions
+### Workspace
 
 | Key | Action |
 |-----|--------|
-| `<leader>cc` | Open / toggle Claude |
-| `<leader>cn` | New session |
-| `<leader>cu` | Resume a past conversation (`--resume` picker) |
-| `<leader>cH` | Session history — browse `~/.claude/projects` (⏎ resume · C-o transcript · C-d delete) |
-| `<leader>cx` | Cancel running headless Claude jobs (`:ClaudeCancel`) |
-| `<leader>cs` | Session picker |
-| `<leader>cR` | Rename session |
-| `<leader>ch` / `<leader>cl` | Previous / next session |
-| `<leader>c1`…`<leader>c9` | Jump to session N (numbers in the bottom bar) |
-| `<A-h>` / `<A-l>` | Cycle sessions — works inside the Claude terminal |
+| `<leader>wS` | Save workspace |
+| `<leader>ws` | Switch workspace |
+| `<leader>wl` | List workspaces |
+| `<leader>wp` | Repos overview |
+| `<leader>wT` | Terminal in the active repo |
+| `<leader>wt` | New project from template |
 
-### Claude — code & edits
+### Git
+
+| Key | Action |
+|-----|--------|
+| `<leader>gg` | Lazygit |
+| `<leader>gc` | Generate commit message from staged diff |
+| `<leader>gs` / `<leader>gS` | Stage hunk / stage buffer |
+| `<leader>gr` / `<leader>gR` | Reset hunk / reset buffer |
+| `<leader>gp` / `<leader>gu` | Preview hunk / undo stage |
+| `<leader>gd` / `<leader>gD` | Diff index / close diff |
+| `<leader>gh` / `<leader>gl` | File history / repo log |
+| `<leader>gB` | Blame file |
+
+### AI helpers (optional)
 
 | Key | Action |
 |-----|--------|
@@ -175,51 +170,12 @@ bash scripts/check.sh        # syntax + module load + unit tests
 | `<leader>cgt` | Generate tests (file / selection) |
 | `<leader>cgr` | Review (file / selection) |
 | `<leader>cgp` | Generate PR description |
-| `<leader>gc` | Generate commit message from staged diff |
-
-### Claude — context, agents & Fleet
-
-| Key | Action |
-|-----|--------|
-| `<leader>cC` | Run a `.claude/commands/*.md` command (picker → background session) |
-| `<leader>ca` | Agents panel |
-| `<leader>cA` | Add to context… |
-| `<leader>ci` | Inject workspace context |
-| `<leader>cd` | Send diagnostics to Claude |
-| `<leader>cT` | Send terminal output to Claude |
 | `<leader>c!` | Shell command → Claude |
+| `<leader>cC` | Run a `.claude/commands/*.md` command |
 | `<leader>cm` | Open / create `CLAUDE.md` |
-| `<leader>cwb` | Fleet: broadcast prompt to all repos |
-| `<leader>cwc` | Fleet: workspace-wide commit |
-| `<leader>cwg` | Fleet: cross-repo grep → Claude |
-| `<leader>cwr` | Fleet: review diff (active repo) |
-| `<leader>cws` | Fleet: scaffold `CLAUDE.md` (active repo) |
-| `<leader>cwu` | Fleet: bump shared package in dependents |
-
-### Git
-
-| Key | Action |
-|-----|--------|
-| `<leader>gg` | Lazygit |
-| `<leader>gc` | Generate commit message from staged diff (Claude) |
-| `<leader>cgp` | Generate PR description (Claude) |
-| `<leader>gs` / `<leader>gS` | Stage hunk / stage buffer |
-| `<leader>gr` / `<leader>gR` | Reset hunk / reset buffer |
-| `<leader>gp` / `<leader>gu` | Preview hunk / undo stage |
-| `<leader>gd` / `<leader>gD` | Diff index / close diff |
-| `<leader>gh` / `<leader>gl` | File history / repo log |
-| `<leader>gB` | Blame file |
-
-### Workspace
-
-| Key | Action |
-|-----|--------|
-| `<leader>wS` | Save workspace |
-| `<leader>ws` | Switch workspace |
-| `<leader>wl` | List workspaces |
-| `<leader>wp` | Repos overview |
-| `<leader>wT` | Terminal in the active repo |
-| `<leader>wt` | New project from template |
+| `<leader>cx` | Cancel running headless Claude jobs |
+| `<leader>cA` (visual) | Send selection to a connected Claude Code |
+| `<leader>cy` / `<leader>cY` | Accept / reject Claude Code inline diff |
 
 ### Tabs (top bar)
 
@@ -264,10 +220,10 @@ bash scripts/check.sh        # syntax + module load + unit tests
 
 ```
 lua/
-└── claudespace/
+└── workspace/
     ├── options.lua          # vim.opt settings
     ├── keymaps.lua          # base keymaps
-    ├── health.lua           # :checkhealth claudespace
+    ├── health.lua           # :checkhealth workspace
     ├── shell.lua            # region layout: the single center content window
     ├── theme/
     │   ├── palette.lua      # dark + light semantic palettes
@@ -279,18 +235,16 @@ lua/
     │   ├── langs.lua        # treesitter / language extras
     │   ├── git.lua          # gitsigns
     │   ├── debug.lua        # DAP
-    │   └── claude.lua       # Claude integration wiring
-    ├── claude/
-    │   ├── sessions.lua     # session lifecycle (terminal buffers)
-    │   ├── bottombar.lua    # Claude session bar (bottom float)
+    │   └── claude.lua       # optional claudecode.nvim wiring
+    ├── claude/              # optional, headless AI helpers (no sessions)
+    │   ├── runner.lua       # stream-json runner (cancelable, cost/turns)
+    │   ├── util.lua         # spinner, floats, async run wrapper
     │   ├── codegen.lua      # edit / generate / tests / docs
     │   ├── git_ops.lua      # commit message / review / PR
-    │   ├── assist.lua       # explain / diagnostics / shell → Claude
+    │   ├── assist.lua       # explain / shell → Claude
     │   ├── fix.lua          # fix diagnostic under cursor
-    │   ├── context.lua      # workspace context for Claude
-    │   ├── workspace.lua    # Fleet: cross-repo Claude actions
-    │   ├── agents.lua       # agents panel
-    │   └── dashboard.lua    # Claude dashboard
+    │   ├── commands.lua     # run .claude/commands/*.md
+    │   └── status.lua       # claudecode.nvim connection indicator
     ├── tabline.lua          # top bar: Chrome-style buffer groups
     ├── sidebar.lua          # left activity bar + panels
     ├── filetree.lua         # file tree (no neo-tree), multi-repo aware

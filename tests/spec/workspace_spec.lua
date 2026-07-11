@@ -1,7 +1,7 @@
 -- Workspace manager — user-case tests.
 -- Uses a temp WDIR per test so nothing touches real workspace state.
 local assert = require 'luassert'
-local ws     = require 'claudespace.workspace'
+local ws     = require 'workspace.workspace'
 
 -- ── Fixtures ──────────────────────────────────────────────────────────────────
 

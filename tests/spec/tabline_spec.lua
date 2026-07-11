@@ -1,7 +1,7 @@
 -- Tabline group logic — unit tests (no UI, no open windows).
 -- Covers: group CRUD, collapse toggle, session roundtrip, reapply_groups.
 local assert = require 'luassert'
-local tl     = require 'claudespace.tabline'
+local tl     = require 'workspace.tabline'
 local T      = tl._test
 local fn     = vim.fn
 

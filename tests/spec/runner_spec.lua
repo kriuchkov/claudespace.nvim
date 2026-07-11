@@ -1,6 +1,6 @@
 -- Tests for the headless stream-json runner: line framing + event parsing.
 local assert = require 'luassert'
-local runner = require 'claudespace.claude.runner'
+local runner = require 'workspace.claude.runner'
 
 describe('line_splitter', function()
   -- jobstart pre-splits stdout on '\n' into list elements: "a\nb\n" -> {'a','b',''}.

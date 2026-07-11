@@ -1,4 +1,4 @@
-# 🚀 claudespace — Go demo
+# 🚀 workspace — Go demo
 
 A pocket-sized Go project to show off the editor. Toggle this preview with
 `<leader>mp`, jump between links with `]l` / `[l`, follow one with `<CR>`.
@@ -21,18 +21,18 @@ A pocket-sized Go project to show off the editor. Toggle this preview with
 - [ ] `<leader>ru` — run the tests, watch the results panel
 - [ ] `gd` on `Greeter` — jump to the definition
 - [ ] `<leader>cC` — run the [`/review`](.claude/commands/review.md) command in the background
-- [ ] `<leader>cn` — a Claude session in the bottom bar
+- [ ] `<leader>gc` — generate a commit message from the staged diff
 
 <details>
 <summary>Why a demo project?</summary>
 
-So you can feel the LSP, tasks, markdown, theme, and Claude wiring on real,
-buildable code — not screenshots. It's isolated in a throwaway git repo, so
+So you can feel the LSP, tasks, markdown, theme, and the optional AI helpers on
+real, buildable code — not screenshots. It's isolated in a throwaway git repo, so
 poke at anything.
 
 </details>
 
 ## Links
 
-- Repo: [github.com/kriuchkov/claudespace.nvim](https://github.com/kriuchkov/claudespace.nvim)
+- Repo: [github.com/kriuchkov/workspace.nvim](https://github.com/kriuchkov/workspace.nvim)
 - Project notes: [`CLAUDE.md`](CLAUDE.md)
