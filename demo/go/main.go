@@ -1,4 +1,4 @@
-// Command demo is a tiny program used to explore claudespace.nvim:
+// Command demo is a tiny program used to explore workspace.nvim:
 // LSP, treesitter, the task/test runner, and Claude actions all work on it.
 package main
 

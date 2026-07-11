@@ -1,6 +1,6 @@
 {
   "build": "go build ./...",
   "test": "go test ./...",
-  "run": "go run . claudespace",
+  "run": "go run . workspace",
   "vet": "go vet ./..."
 }

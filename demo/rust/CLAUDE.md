@@ -1,6 +1,6 @@
 # demo (Rust)
 
-A minimal Rust binary for exploring claudespace.nvim.
+A minimal Rust binary for exploring workspace.nvim.
 
 - `src/main.rs` — the `greet` function, `main`, and unit tests
 

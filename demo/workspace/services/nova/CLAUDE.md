@@ -1,7 +1,7 @@
 # nova (Rust service)
 
 Formats notification lines — part of the **orbit** workspace. Shows that a
-claudespace workspace spans multiple languages.
+workspace spans multiple languages.
 
 - `src/main.rs` — `notify` + `main` + inline tests
 

@@ -1,6 +1,6 @@
-# claudespace demos
+# workspace demos
 
-Real, buildable projects for trying claudespace.nvim hands-on — the multi-repo
+Real, buildable projects for trying workspace.nvim hands-on — the multi-repo
 workspace, LSP, the task/test runner, markdown preview, and Claude actions all
 work out of the box.
 
@@ -11,16 +11,15 @@ work out of the box.
 | [`rust/`](rust) | single Rust repo | `scripts/demo.sh rust` |
 
 The **workspace** (`orbit`) is the headline demo — shaped like a real monorepo,
-six git repos under one `.claudespace/workspace.json` manifest:
+six git repos under one `.workspace/workspace.json` manifest:
 
 - `services/vega` (Go), `services/lyra` (Go), `services/nova` (Rust)
 - `packages/nebula` (Go) — shared, depended on by the Go services (`go.work`)
 - `frontends/aurora` (Rust), `deploy` (docker-compose)
 
 It has an active (pinned) repo, per-repo git status in the tree (a couple of
-repos are left dirty so the ● markers show), cross-repo Fleet commands, and each
-repo ships a `tasks.json`, a `CLAUDE.md`, and `.claude/commands` you can fire
-with `<leader>cC`.
+repos are left dirty so the ● markers show), and each repo ships a `tasks.json`,
+a `CLAUDE.md`, and `.claude/commands` you can fire with `<leader>cC`.
 
 ## Launch
 
@@ -34,25 +33,23 @@ scripts/demo.sh go               # or: rust — the single-repo demos
 
 The script stages a **clean, isolated copy** into throwaway git repo(s) under
 `$TMPDIR` and opens that — so the tree, workspace, git, and LSP see just the
-demo (not the surrounding claudespace.nvim checkout). For the workspace, each
+demo (not the surrounding workspace.nvim checkout). For the workspace, each
 member repo (`services/*`, `libs/*`) is `git init`'d on its own. It auto-detects
-a normal install, a `NVIM_APPNAME=claudespace` dev symlink, or falls back to
+a normal install, a `NVIM_APPNAME=workspace` dev symlink, or falls back to
 `nvim -u init.lua`.
 
 `tour` mode loads [`scripts/demo_tour.lua`](demo_tour.lua): a timed, caption-
 driven walkthrough of the tree (repo roots), the **repos overview**, the active
-repo, **LSP** across modules (hover, `gd`, outline), the **test runner**, the
-**Fleet** commands, **Claude sessions** in the bottom bar, and **markdown
-preview** + theme flip — then it quits itself. LSP/Claude steps need gopls /
-the `claude` CLI; without them the tour skips those bits gracefully.
+repo, **LSP** across modules (hover, `gd`, outline), the **test runner**, and
+**markdown preview** + theme flip — then it quits itself. LSP steps need gopls;
+without it the tour skips those bits gracefully.
 
 ## A 60-second tour
 
 1. `\` — file tree; open a source file (`services/vega/main.go`, `greeter.go`, …).
 2. `<leader>ru` — run the tests, watch the results panel.
-3. `<leader>cn` — new Claude session (bottom bar); ask it something, `<A-l>`/`<A-h>` to switch.
-4. `<leader>cC` — run the `/review` command in the background (spinner → notification).
-5. `<leader>cgt` on the file — generate tests; `<leader>gc` — a commit message from the diff.
+3. `<leader>cC` — run the `/review` command in the background (spinner → notification).
+4. `<leader>cgt` on the file — generate tests; `<leader>gc` — a commit message from the diff.
 6. Open the README, `<leader>mp` — markdown preview; `]l` / `<CR>` — follow links.
 7. `<leader>ub` — flip the theme dark ⇄ light.
 
@@ -84,7 +81,7 @@ asciinema upload demo.cast     # prints https://asciinema.org/a/<ID>
 Then embed the thumbnail in the top-level README:
 
 ```markdown
-[![claudespace demo](https://asciinema.org/a/<ID>.svg)](https://asciinema.org/a/<ID>)
+[![workspace demo](https://asciinema.org/a/<ID>.svg)](https://asciinema.org/a/<ID>)
 ```
 
 ### Option B — inline GIF (agg, local)

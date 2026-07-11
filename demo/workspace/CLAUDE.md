@@ -1,6 +1,6 @@
 # orbit workspace
 
-A multi-repo claudespace workspace for the demo, shaped like a real monorepo.
+A multi-repo workspace for the demo, shaped like a real monorepo.
 
 - `services/vega` (Go) — HTTP greeting service, depends on `packages/nebula`
 - `services/lyra` (Go) — averages scores, depends on `packages/nebula`

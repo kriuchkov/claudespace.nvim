@@ -1,4 +1,4 @@
-//! A tiny binary used to explore claudespace.nvim:
+//! A tiny binary used to explore workspace.nvim:
 //! rust-analyzer, treesitter, the task/test runner, and Claude actions all
 //! work on it.
 

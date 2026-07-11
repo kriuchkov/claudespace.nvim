@@ -1,6 +1,6 @@
 # demo (Go)
 
-A minimal Go program for exploring claudespace.nvim.
+A minimal Go program for exploring workspace.nvim.
 
 - `main.go` — entrypoint
 - `greet.go` / `greet_test.go` — the `Greet` function and its test

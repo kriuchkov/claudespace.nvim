@@ -8,7 +8,7 @@ package.preload['mini.icons'] = function()
 end
 _G.MiniIcons = { get = function() return '', 'MiniIconsGrey', false end }
 
-local ft = require 'claudespace.filetree'
+local ft = require 'workspace.filetree'
 local T  = ft._test
 
 -- ── Header offset ─────────────────────────────────────────────────────────────

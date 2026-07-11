@@ -2,6 +2,7 @@
 CLAUDE.md
 lua/custom/
 .DS_Store
+_works/
 
 # Local demo recording artifacts (the rendered docs/demo.gif is what ships)
 demo.cast
