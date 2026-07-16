@@ -57,9 +57,11 @@ tc.setup {
 map('n', ']t', tc.jump_next, { desc = 'Next TODO',  silent = true })
 map('n', '[t', tc.jump_prev, { desc = 'Prev TODO',  silent = true })
 
--- List all TODOs
-map('n', '<leader>xt', '<cmd>Trouble todo toggle<cr>',
-  { desc = 'TODOs panel', silent = true })
+-- List all TODOs in the sidebar panel. Route through sidebar.select so the key
+-- toggles the panel closed on a second press and keeps the activity-bar icon in
+-- sync (calling tc.workspace directly bypasses S.active and can't close).
+map('n', '<leader>xt', function() require('workspace.sidebar').select 'todo' end,
+  { desc = 'TODOs list', silent = true })
 map('n', '<leader>ft', '<cmd>TodoTelescope<cr>',
   { desc = 'Find TODOs',  silent = true })
 
