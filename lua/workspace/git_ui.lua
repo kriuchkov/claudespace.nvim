@@ -33,8 +33,18 @@ local function is_git_repo(abspath)
   return vim.uv.fs_stat(abspath .. '/.git') ~= nil
 end
 
+-- Short TTL cache (shared idea with repo_status below): render() runs on every
+-- fold/cursor keystroke, and a fold doesn't change the file list — without this,
+-- `h`/`l`/header-<CR> each spawn a blocking `git status`. Cleared on r/s/commit.
+local STATUS_TTL_MS = 2000
+local _parse_cache = {}
+
 -- Staged / unstaged file lists for one repo.
 local function parse_status(cwd)
+  local cached = _parse_cache[cwd]
+  if cached and (vim.uv.now() - cached.ts) < STATUS_TTL_MS then
+    return cached.unstaged, cached.staged
+  end
   local unstaged, staged = {}, {}
   local out = fn.system('git -C ' .. fn.shellescape(cwd) .. ' status --porcelain=v1 2>/dev/null')
   for line in out:gmatch('[^\n]+') do
@@ -51,6 +61,7 @@ local function parse_status(cwd)
       end
     end
   end
+  _parse_cache[cwd] = { ts = vim.uv.now(), unstaged = unstaged, staged = staged }
   return unstaged, staged
 end
 
@@ -58,8 +69,7 @@ end
 -- cursor, refresh); a short TTL cache avoids re-spawning `git status` N times
 -- per interaction. Explicit refresh (r / F) clears it.
 local _status_cache = {}
-local STATUS_TTL_MS = 2000
-local function clear_status_cache() _status_cache = {} end
+local function clear_status_cache() _status_cache = {}; _parse_cache = {} end
 
 -- Lightweight, synchronous per-repo status: branch + dirty/ahead/behind.
 local function repo_status(abspath)
@@ -329,7 +339,9 @@ end
 local function abbrev_dir(dir)
   local parts = vim.split(dir, '/', { plain = true })
   for i = 1, #parts - 1 do
-    if #parts[i] > 0 then parts[i] = parts[i]:sub(1, 1) end
+    -- First whole character, not first byte — :sub(1,1) would split a multibyte
+    -- directory name (e.g. Cyrillic/accented) into an invalid UTF-8 fragment.
+    if #parts[i] > 0 then parts[i] = fn.strcharpart(parts[i], 0, 1) end
   end
   return table.concat(parts, '/')
 end
@@ -503,7 +515,7 @@ function M.show_changes(cwd)
   end
   local function section_of(a) return a and (a.header or a.section) end
 
-  vim.keymap.set('n', 'r', render, o)
+  vim.keymap.set('n', 'r', function() clear_status_cache(); render() end, o)
   vim.keymap.set('n', 'q', function()
     if M._panel_win and api.nvim_win_is_valid(M._panel_win) then
       api.nvim_set_current_win(M._panel_win)
@@ -520,6 +532,7 @@ function M.show_changes(cwd)
     else
       fn.system('git -C ' .. fn.shellescape(cwd) .. ' restore --staged -- ' .. fn.shellescape(a.path))
     end
+    clear_status_cache()   -- staging changed the status; drop the cached list
     render()
   end, o)
 
@@ -565,9 +578,20 @@ function M.show_changes(cwd)
       '^rename ', '^copy ', '^Binary files', '^\\ No newline',
     }
     local dlines = {}
+    -- The `--- ` / `+++ ` file-header lines only precede the first @@ hunk; once
+    -- inside a hunk those prefixes are real deleted/added content (a Lua `-- foo`
+    -- shows up as `--- foo`), so they must NOT be stripped there.
+    local in_hunk = false
     for _, l in ipairs(vim.split(diff, '\n')) do
+      if l:match('^@@') then in_hunk = true end
       local drop = false
-      for _, pat in ipairs(NOISE) do if l:match(pat) then drop = true; break end end
+      for _, pat in ipairs(NOISE) do
+        if l:match(pat) then
+          local is_file_hdr = pat == '^%-%-%- ' or pat == '^%+%+%+ '
+          drop = not (is_file_hdr and in_hunk)
+          break
+        end
+      end
       if not drop then table.insert(dlines, l) end
     end
 
@@ -611,12 +635,17 @@ function M.show_changes(cwd)
     -- Differing middle of two strings after stripping the common prefix/suffix.
     -- Returns nil when the strings are identical or share nothing (whole-line
     -- change — the line background already conveys that).
+    -- A UTF-8 continuation byte (10xxxxxx); a common prefix/suffix that ends on
+    -- one has cut a multibyte char in half.
+    local function cont(byte) return byte and byte >= 0x80 and byte < 0xC0 end
     local function mid(a, b)
       if a == b then return nil end
       local la, lb, p = #a, #b, 0
       while p < la and p < lb and a:byte(p + 1) == b:byte(p + 1) do p = p + 1 end
+      while p > 0 and p < la and cont(a:byte(p + 1)) do p = p - 1 end   -- snap to char start
       local s = 0
       while s < la - p and s < lb - p and a:byte(la - s) == b:byte(lb - s) do s = s + 1 end
+      while s > 0 and cont(a:byte(la - s + 1)) do s = s - 1 end          -- snap to char start
       if p == 0 and s == 0 then return nil end
       return p, la - s, lb - s   -- common prefix len, del-end, add-end (byte offsets)
     end
@@ -684,6 +713,7 @@ function M.show_changes(cwd)
         local out = fn.system('git -C ' .. fn.shellescape(cwd)
                             .. ' commit -m ' .. fn.shellescape(msg) .. ' 2>&1')
         vim.notify(out, vim.log.levels.INFO)
+        clear_status_cache()   -- committed files leave the staged list
         render()
       end)
     end

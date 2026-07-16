@@ -76,9 +76,11 @@ local function begin_view()
 end
 
 -- Winbars on our scratch buffers must survive WinEnter: workspace.winbar wipes
--- the winbar of any nofile buffer unless the window carries this flag.
+-- the winbar of any nofile buffer unless the window carries this flag. `text` is
+-- literal (labels, commit subjects) so `%` is escaped — a raw `%` would be read
+-- as a statusline item (`%=`, `%f`, …) and garble the bar.
 local function set_winbar(win, text)
-  vim.wo[win].winbar = text
+  vim.wo[win].winbar = (text:gsub('%%', '%%%%'))
   pcall(api.nvim_win_set_var, win, 'cs_winbar', true)
 end
 
@@ -99,28 +101,60 @@ local function clear_extra()
   end
 end
 
-function M.close()
+-- True while we mutate our own windows (open / re-render / teardown) so the
+-- BufWipeout watcher below doesn't mistake our own scratch-buffer wipes for the
+-- user navigating away.
+local busy = false
+
+-- Tear the view down. Per window: if it still shows one of our diff scratch
+-- buffers nobody repurposed it — restore the pre-diff buffer (center) or close
+-- it (right pane); if it now holds a real file the user opened there, keep that
+-- buffer and just drop the diff state + repaint the normal breadcrumb. This is
+-- correct for both `q` and abandonment (opening a file into either pane).
+local function teardown()
   local v = M._view
   if not v then return end
   M._view = nil
-  if v.extra then
-    for _, w in ipairs(v.extra) do
-      if api.nvim_win_is_valid(w) then
-        api.nvim_win_call(w, function() vim.cmd 'diffoff' end)
-        pcall(api.nvim_win_close, w, true)
+  busy = true
+
+  local wins = {}
+  for _, w in ipairs(v.extra or {}) do wins[#wins + 1] = { win = w, extra = true } end
+  wins[#wins + 1] = { win = v.center, extra = false }
+
+  for _, e in ipairs(wins) do
+    local w = e.win
+    if api.nvim_win_is_valid(w) then
+      api.nvim_win_call(w, function() vim.cmd 'diffoff' end)
+      pcall(api.nvim_win_del_var, w, 'cs_winbar')
+      if vim.b[api.nvim_win_get_buf(w)].cs_gitdiff then
+        if e.extra then
+          pcall(api.nvim_win_close, w, true)
+        elseif v.prev and api.nvim_buf_is_valid(v.prev) then
+          pcall(api.nvim_win_set_buf, w, v.prev)
+        end
+      end
+      -- Whatever real buffer the window ends on gets its breadcrumb back.
+      if api.nvim_win_is_valid(w) and not vim.b[api.nvim_win_get_buf(w)].cs_gitdiff then
+        pcall(function() require('workspace.winbar').apply(w) end)
       end
     end
   end
-  if api.nvim_win_is_valid(v.center) then
-    api.nvim_win_call(v.center, function() vim.cmd 'diffoff' end)
-    -- Drop the keep-winbar flag first: restoring `prev` fires BufWinEnter and
-    -- workspace.winbar then repaints the normal breadcrumb.
-    pcall(api.nvim_win_del_var, v.center, 'cs_winbar')
-    if v.prev and api.nvim_buf_is_valid(v.prev) then
-      pcall(api.nvim_win_set_buf, v.center, v.prev)
-    end
-  end
+  busy = false
 end
+
+M.close = teardown
+
+-- A diff scratch buffer got wiped outside our own render/teardown — i.e. the
+-- user opened another file into a diff pane, or closed one with :q. Drop the
+-- stale view so its winbar flag, `prev`, and orphaned split don't linger.
+api.nvim_create_autocmd('BufWipeout', {
+  group = api.nvim_create_augroup('cs_gitdiff_view', { clear = true }),
+  callback = function(ev)
+    if busy or not M._view then return end
+    local ok, mine = pcall(function() return vim.b[ev.buf].cs_gitdiff end)
+    if ok and mine then vim.schedule(teardown) end
+  end,
+})
 
 -- Read-only scratch buffer holding `lines`, with a winbar-friendly name and `q`
 -- (and <Esc>) bound to close the whole view.
@@ -132,6 +166,7 @@ local function scratch(lines, name, ft)
   vim.bo[b].modifiable = false
   vim.bo[b].filetype   = ft or ''
   vim.bo[b].swapfile   = false
+  vim.b[b].cs_gitdiff  = true   -- tag for the BufWipeout view watcher
   pcall(api.nvim_buf_set_name, b, name)
   vim.keymap.set('n', 'q',     M.close, { buffer = b, nowait = true, silent = true })
   vim.keymap.set('n', '<Esc>', M.close, { buffer = b, nowait = true, silent = true })
@@ -189,6 +224,7 @@ function M.file_diff(cwd, path, opts)
   end
 
   ensure_diffopt()
+  busy = true   -- our own scratch churn below must not trip the BufWipeout watcher
   local v = begin_view()
   clear_extra()
   -- Remember the changed-file cursor for ]f/[f, if the caller supplied one.
@@ -226,6 +262,7 @@ function M.file_diff(cwd, path, opts)
   end
   api.nvim_set_current_win(rwin)
   api.nvim_win_call(rwin, function() pcall(vim.cmd, 'normal! gg]c') end)
+  busy = false
 end
 
 -- Step to the next/prev changed file in the active diff view.
@@ -261,7 +298,11 @@ function M.diff_current()
   local abs = fn.expand('%:p')
   if abs == '' then vim.notify('No file in buffer', vim.log.levels.WARN) return end
   local cwd = fn.systemlist({ 'git', '-C', fn.expand('%:p:h'), 'rev-parse', '--show-toplevel' })[1]
-  if not cwd or cwd == '' then vim.notify('Not a git repo', vim.log.levels.WARN) return end
+  -- systemlist captures stderr, so a failed rev-parse yields the "fatal: …" line,
+  -- not '' — gate on the exit code, else it'd become a bogus cwd.
+  if vim.v.shell_error ~= 0 or not cwd or cwd == '' then
+    vim.notify('Not a git repo', vim.log.levels.WARN) return
+  end
   local rel = fn.fnamemodify(abs, ':.')
   if abs:sub(1, #cwd) == cwd then rel = abs:sub(#cwd + 2) end
   M.diff_from(cwd, rel, false)
@@ -301,6 +342,7 @@ local function commit_list(cwd, title, commits, on_select)
   add('')
   add('  <CR> open   q back', 'CSInfo')
 
+  busy = true
   local v = begin_view()
   clear_extra()
   local buf = scratch(lines, title, 'cs_gitlog')
@@ -313,6 +355,7 @@ local function commit_list(cwd, title, commits, on_select)
   api.nvim_set_current_win(v.center)
   vim.wo[v.center].cursorline = true
   set_winbar(v.center, '  ' .. title .. '   <CR> open   q back')
+  busy = false
 
   vim.keymap.set('n', '<CR>', function()
     local c = row_to_commit[api.nvim_win_get_cursor(v.center)[1]]
@@ -337,12 +380,14 @@ function M.repo_log(cwd)
     '--format=' .. LOG_FMT, '--date=short' }
   commit_list(cwd, 'LOG  ' .. fn.fnamemodify(cwd, ':t'), parse_log(out), function(c)
     local diff = fn.systemlist { 'git', '-C', cwd, 'show', '--stat', '-p', c.hash }
+    busy = true
     local v = begin_view()
     clear_extra()
     local buf = scratch(diff, 'commit ' .. c.hash, 'git')
     api.nvim_win_set_buf(v.center, buf)
     api.nvim_set_current_win(v.center)
     set_winbar(v.center, '  commit ' .. c.hash .. '  ' .. c.subject)
+    busy = false
   end)
 end
 
@@ -351,6 +396,8 @@ end
 local function repo_root(cwd)
   cwd = cwd or fn.getcwd()
   local top = fn.systemlist({ 'git', '-C', cwd, 'rev-parse', '--show-toplevel' })[1]
+  -- On failure systemlist returns the "fatal: …" stderr line; fall back to cwd.
+  if vim.v.shell_error ~= 0 then return cwd end
   return (top and top ~= '') and top or cwd
 end
 

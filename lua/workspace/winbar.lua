@@ -74,6 +74,20 @@ local SKIP_FT = {
 }
 local SKIP_BT = { terminal = true, nofile = true, prompt = true, quickfix = true }
 
+-- Set the correct winbar for `win` (default: current window) from its buffer.
+-- Panels that own their winbar clear the w:cs_winbar flag before calling this so
+-- the normal breadcrumb comes back (e.g. gitdiff restoring a file into center).
+function M.apply(win)
+  local run = win and function(f) api.nvim_win_call(win, f) end or function(f) f() end
+  run(function()
+    if SKIP_FT[vim.bo.filetype] or SKIP_BT[vim.bo.buftype] then
+      vim.wo.winbar = ''
+    else
+      vim.wo.winbar = '%!v:lua.require("workspace.winbar").render()'
+    end
+  end)
+end
+
 function M.setup()
   setup_highlights()
   api.nvim_create_autocmd('User', { pattern = 'CSThemeApplied', callback = setup_highlights })
@@ -82,11 +96,7 @@ function M.setup()
       -- Panels (gitdiff labels, diag/todo hints) own their winbar: the w: flag
       -- keeps it from being wiped by the nofile rule below on every re-entry.
       if vim.w.cs_winbar then return end
-      if SKIP_FT[vim.bo.filetype] or SKIP_BT[vim.bo.buftype] then
-        vim.wo.winbar = ''
-      else
-        vim.wo.winbar = '%!v:lua.require("workspace.winbar").render()'
-      end
+      M.apply()
     end,
   })
 end
